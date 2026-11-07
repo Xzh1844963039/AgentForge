@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agentforge.models.common import new_id, utc_now
+from agentforge.models.tool import ToolCall
 
 
 class TaskStatus(str, Enum):
@@ -110,6 +111,7 @@ class DelegationRequest(BaseModel):
 class AgentActionType(str, Enum):
     COMPLETE = "complete"
     DELEGATE = "delegate"
+    TOOL_CALL = "tool_call"
     FAIL = "fail"
 
 
@@ -119,6 +121,7 @@ class AgentAction(BaseModel):
     action: AgentActionType
     content: str = ""
     delegation: DelegationRequest | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
     error: str | None = None
     reasoning: str | None = None
 
@@ -129,6 +132,8 @@ class AgentAction(BaseModel):
         if self.action == AgentActionType.DELEGATE:
             if self.delegation is None or not self.delegation.subtasks:
                 raise ValueError("delegate actions require at least one subtask")
+        if self.action == AgentActionType.TOOL_CALL and not self.tool_calls:
+            raise ValueError("tool_call actions require at least one tool call")
         if self.action == AgentActionType.FAIL and not (
             (self.error and self.error.strip()) or self.content.strip()
         ):

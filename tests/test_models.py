@@ -17,6 +17,7 @@ from agentforge.models.task import (
     Task,
     TaskStatus,
 )
+from agentforge.models.tool import ToolCall
 
 
 def test_message_ids_are_unique_and_content_required():
@@ -89,6 +90,17 @@ def test_agent_action_validation():
         delegation=delegation,
     )
     assert delegated.delegation is not None
+
+
+def test_tool_call_action_requires_calls():
+    tool_action = AgentAction(
+        action=AgentActionType.TOOL_CALL,
+        tool_calls=[ToolCall(name="read_file", arguments={"path": "note.md"})],
+    )
+    assert tool_action.tool_calls[0].name == "read_file"
+
+    with pytest.raises(ValidationError):
+        AgentAction(action=AgentActionType.TOOL_CALL)
 
 
 def test_execution_plan_rejects_duplicate_keys():

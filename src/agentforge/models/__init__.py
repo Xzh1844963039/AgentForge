@@ -15,6 +15,16 @@ from agentforge.models.task import (
     TaskStatus,
     TERMINAL_TASK_STATUSES,
 )
+from agentforge.models.tool import (
+    ApprovalDecision,
+    ApprovalRequest,
+    ApprovalStatus,
+    ArtifactRecord,
+    PermissionDecision,
+    ToolCall,
+    ToolCallRecord,
+    ToolResultStatus,
+)
 from agentforge.models.workflow import Workflow, WorkflowMetrics, WorkflowStatus
 
 __all__ = [
@@ -24,6 +34,10 @@ __all__ = [
     "AgentExecution",
     "AgentProfile",
     "AgentRole",
+    "ApprovalDecision",
+    "ApprovalRequest",
+    "ApprovalStatus",
+    "ArtifactRecord",
     "Conversation",
     "ConversationType",
     "DelegatedSubtask",
@@ -33,11 +47,15 @@ __all__ = [
     "HUMAN_SENDER",
     "Message",
     "MessageType",
+    "PermissionDecision",
     "SubtaskSpec",
     "SYSTEM_SENDER",
     "Task",
     "TaskStatus",
     "TERMINAL_TASK_STATUSES",
+    "ToolCall",
+    "ToolCallRecord",
+    "ToolResultStatus",
     "Workflow",
     "WorkflowMetrics",
     "WorkflowStatus",

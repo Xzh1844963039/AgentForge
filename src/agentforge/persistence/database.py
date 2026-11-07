@@ -17,6 +17,13 @@ from agentforge.models.message import (
     MessageType,
 )
 from agentforge.models.task import Task, TaskStatus
+from agentforge.models.tool import (
+    ApprovalStatus,
+    ArtifactRecord,
+    PermissionDecision,
+    ToolCallRecord,
+    ToolResultStatus,
+)
 from agentforge.models.workflow import Workflow, WorkflowMetrics, WorkflowStatus
 
 _SCHEMA = """
@@ -116,6 +123,46 @@ CREATE TABLE IF NOT EXISTS memory_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_memory_agent
     ON memory_entries(agent_id, namespace, created_at);
+
+CREATE TABLE IF NOT EXISTS tool_calls (
+    tool_call_id TEXT PRIMARY KEY,
+    workflow_id TEXT,
+    task_id TEXT,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    arguments TEXT NOT NULL,
+    status TEXT NOT NULL,
+    output TEXT NOT NULL,
+    error TEXT,
+    duration_seconds REAL NOT NULL,
+    permission_decision TEXT NOT NULL,
+    approval_status TEXT NOT NULL,
+    approval_id TEXT,
+    permissions TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    metadata TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_workflow
+    ON tool_calls(workflow_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_agent
+    ON tool_calls(agent_id, started_at);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+    artifact_id TEXT PRIMARY KEY,
+    owner_agent_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    source_path TEXT NOT NULL,
+    workflow_id TEXT,
+    task_id TEXT,
+    created_at TEXT NOT NULL,
+    metadata TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_owner
+    ON artifacts(owner_agent_id, created_at);
 """
 
 
@@ -156,8 +203,8 @@ class SQLiteStore:
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
             self._conn.execute(
-                "INSERT OR IGNORE INTO schema_meta(key, value) "
-                "VALUES('schema_version', '1')"
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '2') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
             )
 
     # ------------------------------------------------------------------ lifecycle
@@ -565,6 +612,151 @@ class SQLiteStore:
                 "DELETE FROM memory_entries WHERE memory_id = ?", (memory_id,)
             )
 
+    # ------------------------------------------------------------------- tool calls
+    def save_tool_call(self, record: ToolCallRecord) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO tool_calls(
+                    tool_call_id, workflow_id, task_id, agent_id, tool_name,
+                    arguments, status, output, error, duration_seconds,
+                    permission_decision, approval_status, approval_id,
+                    permissions, started_at, finished_at, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.tool_call_id,
+                    record.workflow_id,
+                    record.task_id,
+                    record.agent_id,
+                    record.tool_name,
+                    _json(record.arguments),
+                    record.status.value,
+                    _json(record.output),
+                    record.error,
+                    record.duration_seconds,
+                    record.permission_decision.value,
+                    record.approval_status.value,
+                    record.approval_id,
+                    _json(record.permissions),
+                    record.started_at.isoformat(),
+                    record.finished_at.isoformat() if record.finished_at else None,
+                    _json(record.metadata),
+                ),
+            )
+
+    def list_tool_calls(
+        self,
+        workflow_id: str | None = None,
+        *,
+        task_id: str | None = None,
+        agent_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[ToolCallRecord]:
+        query = "SELECT * FROM tool_calls WHERE 1=1"
+        params: list[Any] = []
+        if workflow_id is not None:
+            query += " AND workflow_id = ?"
+            params.append(workflow_id)
+        if task_id is not None:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        if agent_id is not None:
+            query += " AND agent_id = ?"
+            params.append(agent_id)
+        query += " ORDER BY started_at ASC, rowid ASC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._row_to_tool_call(row) for row in rows]
+
+    @staticmethod
+    def _row_to_tool_call(row: sqlite3.Row) -> ToolCallRecord:
+        return ToolCallRecord(
+            tool_call_id=row["tool_call_id"],
+            workflow_id=row["workflow_id"],
+            task_id=row["task_id"],
+            agent_id=row["agent_id"],
+            tool_name=row["tool_name"],
+            arguments=_loads(row["arguments"], {}),
+            status=ToolResultStatus(row["status"]),
+            output=_loads(row["output"], {}),
+            error=row["error"],
+            duration_seconds=float(row["duration_seconds"]),
+            permission_decision=PermissionDecision(row["permission_decision"]),
+            approval_status=ApprovalStatus(row["approval_status"]),
+            approval_id=row["approval_id"],
+            permissions=_loads(row["permissions"], []),
+            started_at=datetime.fromisoformat(row["started_at"]),
+            finished_at=_dt(row["finished_at"]),
+            metadata=_loads(row["metadata"], {}),
+        )
+
+    # -------------------------------------------------------------------- artifacts
+    def save_artifact(self, artifact: ArtifactRecord) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO artifacts(
+                    artifact_id, owner_agent_id, filename, stored_path, sha256,
+                    size_bytes, source_path, workflow_id, task_id, created_at,
+                    metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    artifact.artifact_id,
+                    artifact.owner_agent_id,
+                    artifact.filename,
+                    artifact.stored_path,
+                    artifact.sha256,
+                    artifact.size_bytes,
+                    artifact.source_path,
+                    artifact.workflow_id,
+                    artifact.task_id,
+                    artifact.created_at.isoformat(),
+                    _json(artifact.metadata),
+                ),
+            )
+
+    def get_artifact(self, artifact_id: str) -> ArtifactRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM artifacts WHERE artifact_id = ?", (artifact_id,)
+            ).fetchone()
+        return self._row_to_artifact(row) if row else None
+
+    def list_artifacts(
+        self, owner_agent_id: str | None = None, *, limit: int = 100
+    ) -> list[ArtifactRecord]:
+        query = "SELECT * FROM artifacts"
+        params: list[Any] = []
+        if owner_agent_id is not None:
+            query += " WHERE owner_agent_id = ?"
+            params.append(owner_agent_id)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._row_to_artifact(row) for row in rows]
+
+    @staticmethod
+    def _row_to_artifact(row: sqlite3.Row) -> ArtifactRecord:
+        return ArtifactRecord(
+            artifact_id=row["artifact_id"],
+            owner_agent_id=row["owner_agent_id"],
+            filename=row["filename"],
+            stored_path=row["stored_path"],
+            sha256=row["sha256"],
+            size_bytes=int(row["size_bytes"]),
+            source_path=row["source_path"],
+            workflow_id=row["workflow_id"],
+            task_id=row["task_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            metadata=_loads(row["metadata"], {}),
+        )
+
     # ----------------------------------------------------------------------- misc
     def table_counts(self) -> dict[str, int]:
         tables: Iterable[str] = (
@@ -574,6 +766,8 @@ class SQLiteStore:
             "agent_executions",
             "workflows",
             "memory_entries",
+            "tool_calls",
+            "artifacts",
         )
         counts: dict[str, int] = {}
         with self._lock:
