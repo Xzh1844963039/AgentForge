@@ -1,9 +1,43 @@
-"""Tool interfaces and registry.
+"""Tool framework: contracts, dispatcher, permissions, and built-in tools."""
 
-TODO (Phase 3): implement internet search, sandboxed Python, Markdown/TXT file
-operations, and GitHub commit/push tools with explicit permission checks.
-"""
+from agentforge.tools.approval import (
+    ApprovalGate,
+    AutoApprovalGate,
+    PendingApprovalGate,
+)
+from agentforge.tools.base import (
+    BaseTool,
+    ToolExecutionContext,
+    ToolPermission,
+    ToolRegistry,
+    ToolResult,
+    ToolSpec,
+)
+from agentforge.tools.builtins import BuiltTools, build_default_tools
+from agentforge.tools.executor import ToolExecutor
+from agentforge.tools.policy import (
+    DEFAULT_AGENT_PERMISSIONS,
+    PermissionEvaluation,
+    ToolPermissionPolicy,
+)
+from agentforge.tools.workspace import WorkspaceError, WorkspaceManager
 
-from agentforge.tools.base import BaseTool, ToolRegistry, ToolResult, ToolSpec
-
-__all__ = ["BaseTool", "ToolRegistry", "ToolResult", "ToolSpec"]
+__all__ = [
+    "ApprovalGate",
+    "AutoApprovalGate",
+    "BaseTool",
+    "BuiltTools",
+    "DEFAULT_AGENT_PERMISSIONS",
+    "PendingApprovalGate",
+    "PermissionEvaluation",
+    "ToolExecutionContext",
+    "ToolExecutor",
+    "ToolPermission",
+    "ToolPermissionPolicy",
+    "ToolRegistry",
+    "ToolResult",
+    "ToolSpec",
+    "WorkspaceError",
+    "WorkspaceManager",
+    "build_default_tools",
+]

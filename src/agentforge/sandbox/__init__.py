@@ -1,21 +1,23 @@
-"""Sandbox package.
-
-Phase 1 provides interfaces only; Docker execution and private per-agent
-filesystems are explicitly **not implemented** and are marked TODO for Phase 3.
-"""
+"""Sandbox package: isolated per-agent execution."""
 
 from agentforge.sandbox.base import (
     BaseSandbox,
-    DockerSandbox,
     SandboxConfig,
+    SandboxError,
     SandboxResult,
     SandboxStatus,
+    SandboxUnavailableError,
 )
+from agentforge.sandbox.docker import DockerSandbox
+from agentforge.sandbox.manager import SandboxManager
 
 __all__ = [
     "BaseSandbox",
     "DockerSandbox",
     "SandboxConfig",
+    "SandboxError",
+    "SandboxManager",
     "SandboxResult",
     "SandboxStatus",
+    "SandboxUnavailableError",
 ]
