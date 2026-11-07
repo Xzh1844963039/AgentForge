@@ -439,6 +439,7 @@ class TaskOrchestrator:
             return
 
         transition_task(task, TaskStatus.RUNNING)
+        agent.begin_task(task)
         task.metadata["resumed"] = resumed
         self.store.save_task(task)
         self.events.event(
@@ -554,6 +555,7 @@ class TaskOrchestrator:
                 f"Task completed: {kind} by {agent.agent_id} "
                 f"({(task.duration_seconds() or 0.0):.3f}s).",
             )
+            agent.sync_task_state(task)
             return
 
         if result.action.action == AgentActionType.FAIL:
@@ -581,10 +583,12 @@ class TaskOrchestrator:
                 MessageType.ERROR,
                 f"Task failed: {kind} by {agent.agent_id}: {error}",
             )
+            agent.sync_task_state(task)
             return
 
         # Delegation
         await self._handle_delegation(ctx, task, agent.agent_id, result)
+        agent.sync_task_state(task)
 
     async def _handle_delegation(
         self,
@@ -864,6 +868,14 @@ class TaskOrchestrator:
             f"Task failed ({task.metadata.get('kind', 'generic')}): {error}",
             task_id=task.task_id,
         )
+        self._sync_agent_task_state(task)
+
+    def _sync_agent_task_state(self, task: Task) -> None:
+        if task.metadata.get("role") == "root" or not task.assigned_agent:
+            return
+        agent = self.agents.get(task.assigned_agent)
+        if agent is not None:
+            agent.sync_task_state(task)
 
     def _fail_workflow(self, ctx: _RunContext, root: Task, error: str) -> None:
         ctx.workflow.status = WorkflowStatus.FAILED
@@ -876,6 +888,7 @@ class TaskOrchestrator:
                 try:
                     transition_task(task, TaskStatus.FAILED, error=error)
                     self.store.save_task(task)
+                    self._sync_agent_task_state(task)
                 except Exception:
                     logger.exception("failed to abort task %s", task.task_id)
 
@@ -915,6 +928,7 @@ class TaskOrchestrator:
                             task, TaskStatus.FAILED, error=workflow.error or "workflow failed"
                         )
                         self.store.save_task(task)
+                        self._sync_agent_task_state(task)
                     except Exception:
                         logger.exception("failed to abort task %s", task.task_id)
 

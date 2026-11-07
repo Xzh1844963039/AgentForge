@@ -23,7 +23,7 @@ earlier contracts; extension points are defined in `docs/ARCHITECTURE.md`.
 - Implement a unified LLM provider interface with DeepSeek, HKGAI, and deterministic
   Mock providers; support key/base URL/model/temperature/max tokens/timeout/retry.
 - Implement four agents (Coordinator, Research, Coding, Reviewer) with independent
-  inboxes, memory interfaces, and tool interfaces.
+  inboxes, task-state mirrors, memory interfaces, and tool interfaces.
 - Implement direct, group, and agent-to-agent messaging with durable replay.
 - Implement LLM-generated task decomposition, plan validation, capability-based
   assignment, dependency-ordered execution, bounded delegation, failure propagation,
@@ -36,7 +36,7 @@ earlier contracts; extension points are defined in `docs/ARCHITECTURE.md`.
 
 - `src/agentforge/` runtime with the modules listed in the README.
 - SQLite schema covering seven tables; JSONL event stream.
-- 81 automated tests: unit, integration, protocol, persistence, CLI subprocess.
+- 82 automated tests: unit, integration, protocol, persistence, CLI subprocess.
 - Mock demo: 5 substantive tasks, 100% completion, 6 LLM calls, 16 messages,
   5 memory entries, full audit trail.
 - Documentation: README, architecture, development plan, Phase 1 report.
@@ -51,7 +51,7 @@ earlier contracts; extension points are defined in `docs/ARCHITECTURE.md`.
 | Reviewer independently audits before the final report | ✅ |
 | Delegation depth/steps/task limits prevent loops | ✅ |
 | Persistence survives runtime restart | ✅ |
-| Tests actually executed | ✅ 81 passed |
+| Tests actually executed | ✅ 82 passed |
 
 ### Open item
 

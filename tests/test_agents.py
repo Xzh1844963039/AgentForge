@@ -10,7 +10,7 @@ from agentforge.llm.mock import MockProvider
 from agentforge.memory import InMemoryMemoryStore
 from agentforge.models.agent import AgentRole
 from agentforge.models.message import Message, MessageType
-from agentforge.models.task import Task
+from agentforge.models.task import Task, TaskStatus
 from agentforge.tools import ToolRegistry
 
 
@@ -124,3 +124,24 @@ def test_agent_inbox_delivery_and_filtering():
     assert research.take_message("task_2") is None
     assert research.take_message() == first
     assert research.inbox_size == 0
+
+
+def test_agent_task_state_tracking():
+    _, _, agents = build_agents()
+    research = next(agent for agent in agents if agent.agent_id == "research")
+    task = Task(
+        task_id="task_state",
+        workflow_id="wf",
+        description="research work",
+        assigned_agent="research",
+    )
+
+    research.begin_task(task)
+    assert research.current_task_id == "task_state"
+    assert research.task_state("task_state") is TaskStatus.RUNNING
+
+    task.status = TaskStatus.COMPLETED
+    research.sync_task_state(task)
+    assert research.current_task_id is None
+    assert research.task_state("task_state") is TaskStatus.COMPLETED
+    assert research.task_states() == {"task_state": TaskStatus.COMPLETED}

@@ -259,6 +259,13 @@ async def test_full_mock_workflow_meets_phase1_demo(make_runtime):
     assert runtime.memory.count("reviewer", namespace="experience") == 1
     assert runtime.memory.count("coordinator", namespace="experience") == 2
 
+    # Per-agent task state mirrors the orchestrator's authoritative task status.
+    for task in tasks:
+        agent = runtime.get_agent(task.assigned_agent)
+        assert agent.task_state(task.task_id) is task.status
+    for agent in runtime.agents.list():
+        assert agent.current_task_id is None
+
 
 async def test_group_conversation_is_created_with_all_agents(make_runtime):
     runtime = make_runtime(provider=MockProvider())

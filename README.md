@@ -13,7 +13,7 @@ AgentForge is a Python multi-agent runtime built for the HKUST NLP/Agent course 
 - a deterministic offline demo plus an interactive CLI.
 
 > **Phase 1 status (2026-11-07): complete and verified offline.**
-> 81 automated tests pass. Real DeepSeek/HKGAI API calls are **Pending** because no
+> 82 automated tests pass. Real DeepSeek/HKGAI API calls are **Pending** because no
 > API key was available during development. Mock output is deterministic test data
 > and is never presented as real LLM evaluation.
 
@@ -80,7 +80,7 @@ and metrics are real.
 pytest -q
 ```
 
-Expected: `81 passed`. Optional coverage report:
+Expected: `82 passed`. Optional coverage report:
 
 ```powershell
 pytest --cov=agentforge --cov-report=term -q
@@ -283,7 +283,7 @@ phases extend rather than rewrite the runtime.
 │   ├── persistence/     SQLite repository and JSONL event logger
 │   ├── runtime.py       dependency wiring and public runtime API
 │   └── cli.py           CLI and interactive REPL
-├── tests/               81 pytest tests (unit + integration + CLI subprocess)
+├── tests/               82 pytest tests (unit + integration + CLI subprocess)
 ├── examples/            programmatic mock and real-provider examples
 ├── docs/                architecture, plan, Phase 1 report
 ├── data/                runtime SQLite/JSONL output (ignored by Git)
@@ -300,11 +300,11 @@ Actual results from this workspace (2026-11-07, Windows, Python 3.12.10):
 
 ```text
 $ pytest -q
-81 passed in 7.83s
+82 passed in 7.91s
 
 $ pytest --cov=agentforge --cov-report=term -q
-81 passed in 10.41s
-TOTAL 2545 statements, 745 missed, 71% coverage
+82 passed in 9.41s
+TOTAL 2579 statements, 747 missed, 71% coverage
 ```
 
 The CLI is tested through real subprocesses (`test_cli.py`), so its lines are not

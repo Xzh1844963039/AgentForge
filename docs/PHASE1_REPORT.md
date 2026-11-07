@@ -40,7 +40,7 @@ evaluation.
 | Per-agent Docker sandbox and private FS | ⏳ TODO | `BaseSandbox` contract; `DockerSandbox` raises NotImplemented explicitly |
 | Internet search, files, Python, GitHub | ⏳ TODO | `ToolRegistry`/`BaseTool` contracts only |
 | Task completion rate and execution time | ✅ | `WorkflowMetrics`, CLI `metrics`, workflow history |
-| Extensibility, error handling, tests | ✅ | Layered packages, typed errors, 81 passing tests |
+| Extensibility, error handling, tests | ✅ | Layered packages, typed errors, 82 passing tests |
 
 The unimplemented capabilities are explicitly marked TODO in code and docs; no
 simulated success is reported for them.
@@ -130,9 +130,9 @@ python -m ruff check src tests --select F,E9
 ### Results
 
 ```text
-81 passed in 7.83s
-81 passed in 10.41s
-TOTAL: 2545 statements, 745 missed, 71% coverage
+82 passed in 7.91s
+82 passed in 9.41s
+TOTAL: 2579 statements, 747 missed, 71% coverage
 Ruff F/E9: All checks passed
 ```
 
@@ -145,7 +145,7 @@ orchestrator 87%, persistence 93%, messaging 89%.
 
 | File | Tests | Focus |
 |---|---:|---|
-| `test_agents.py` | 5 | registry, execution, memory use, private chat, inbox |
+| `test_agents.py` | 6 | registry, execution, memory use, private chat, inbox |
 | `test_assignment.py` | 10 | capability routing, strict coverage, tie-break |
 | `test_cli.py` | 2 | real subprocess demo/history/chat/tasks/messages/agents |
 | `test_coordinator.py` | 5 | valid plan, repair retry, failure, cycle, no agents |
@@ -327,8 +327,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 - Repository initialized locally; no remote configured.
 - `.env`, `.venv`, runtime databases, and JSONL logs are ignored.
 - No push performed.
-- Two local commits record implementation/tests and documentation/examples; exact
-  hashes are reported in the final Phase 1 hand-off message and `git log`.
+- Three local commits record the runtime/tests, documentation/examples, and the
+  per-agent task-state addition; exact hashes are reported in the final Phase 1
+  hand-off message and `git log`.
 
 ---
 

@@ -64,7 +64,7 @@ abstractions. Only `runtime.py` wires concrete implementations together.
 | `persistence/` | Thread-safe SQLite repository and append-only JSONL event logger. |
 | `memory/` | Per-agent memory interface; in-memory and SQLite implementations; keyword+recency recall. |
 | `messaging/` | Conversation lifecycle and durable message routing/broadcasting. |
-| `agents/` | `BaseAgent`, four roles, profile defaults, registry, prompt/action protocol. |
+| `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces), four roles, profile defaults, registry, prompt/action protocol. |
 | `orchestration/` | Plan validation, capability matching, task state machine, DAG executor, budgets, metrics integration. |
 | `evaluation/` | Completion rate, timing, token, delegation and depth metrics. |
 | `tools/` | Tool contract and registry. No production tools in Phase 1. |

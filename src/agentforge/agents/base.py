@@ -23,7 +23,7 @@ from agentforge.llm.base import (
 from agentforge.memory.base import MemoryStore
 from agentforge.models.agent import AgentCard, AgentProfile, AgentRole
 from agentforge.models.message import Message
-from agentforge.models.task import AgentAction, Task
+from agentforge.models.task import AgentAction, Task, TaskStatus
 from agentforge.orchestration.errors import AgentOutputError
 from agentforge.tools.base import ToolRegistry
 
@@ -90,6 +90,8 @@ class BaseAgent:
         self.tools = tools
         self.memory_recall_limit = memory_recall_limit
         self._inbox: list[Message] = []
+        self._task_states: dict[str, TaskStatus] = {}
+        self._active_task_id: str | None = None
         self._lock = threading.Lock()
 
     # ---------------------------------------------------------------- identity
@@ -137,6 +139,35 @@ class BaseAgent:
     def inbox_size(self) -> int:
         with self._lock:
             return len(self._inbox)
+
+    # --------------------------------------------------------------- task state
+    def begin_task(self, task: Task) -> None:
+        """Mark a task as currently executing for this agent."""
+        with self._lock:
+            self._task_states[task.task_id] = TaskStatus.RUNNING
+            self._active_task_id = task.task_id
+
+    def sync_task_state(self, task: Task) -> None:
+        """Mirror the orchestrator's authoritative task status onto the agent."""
+        with self._lock:
+            self._task_states[task.task_id] = task.status
+            if self._active_task_id == task.task_id and (
+                task.is_terminal or task.status == TaskStatus.BLOCKED
+            ):
+                self._active_task_id = None
+
+    def task_state(self, task_id: str) -> TaskStatus | None:
+        with self._lock:
+            return self._task_states.get(task_id)
+
+    def task_states(self) -> dict[str, TaskStatus]:
+        with self._lock:
+            return dict(self._task_states)
+
+    @property
+    def current_task_id(self) -> str | None:
+        with self._lock:
+            return self._active_task_id
 
     # -------------------------------------------------------------- execution
     async def execute_task(
