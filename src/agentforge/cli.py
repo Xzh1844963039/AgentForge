@@ -2,10 +2,13 @@
 
 Commands:
   agentforge demo                  Deterministic offline demo (mock provider)
+  agentforge demo-tools            Phase 2 tool + Docker sandbox demo
   agentforge run "<goal>"          Execute a goal with the configured provider
   agentforge chat <agent_id>       Private chat with one agent
   agentforge repl                  Interactive shell
   agentforge agents                List agents and capabilities
+  agentforge tools                 List tool contracts and permissions
+  agentforge tool-calls            Inspect tool invocation audit records
   agentforge tasks [--workflow ID] Task status
   agentforge messages              Conversations / transcript replay
   agentforge history               Workflow history
@@ -17,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from pathlib import Path
@@ -33,9 +37,14 @@ from agentforge.agents.registry import AgentNotFoundError
 from agentforge.config.settings import Settings
 from agentforge.llm.base import ProviderConfigurationError
 from agentforge.models.agent import AgentCard
+from agentforge.models.tool import ToolCallRecord
 from agentforge.models.workflow import Workflow, WorkflowStatus
 from agentforge.persistence.database import SQLiteStore
 from agentforge.runtime import AgentForgeRuntime
+from agentforge.sandbox.docker import DockerSandbox
+from agentforge.tools.artifact_store import ArtifactStore
+from agentforge.tools.builtins import build_default_tools
+from agentforge.tools.workspace import WorkspaceManager
 
 console = Console()
 logger = logging.getLogger("agentforge.cli")
@@ -45,12 +54,23 @@ DEMO_GOAL = (
     "implementation plan, and review the plan for potential issues."
 )
 
+PHASE2_GOAL = (
+    "Create a Python script that calculates prime numbers, execute it, verify "
+    "the output, and produce a Markdown report summarizing the implementation "
+    "and test results."
+)
+
 STATUS_STYLES = {
     "completed": "bold green",
     "failed": "bold red",
     "running": "bold yellow",
     "pending": "cyan",
     "blocked": "magenta",
+    "success": "bold green",
+    "error": "bold red",
+    "timeout": "bold red",
+    "denied": "bold magenta",
+    "pending_approval": "bold yellow",
 }
 
 
@@ -58,7 +78,7 @@ STATUS_STYLES = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentforge",
-        description="AgentForge: multi-agent collaborative platform (Phase 1)",
+        description="AgentForge: multi-agent collaborative platform (Phase 2)",
     )
     parser.add_argument("--version", action="version", version=__version__)
     _add_common_options(parser)
@@ -67,6 +87,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = subparsers.add_parser("demo", help="run the deterministic offline demo")
     _add_common_options(demo, suppress_defaults=True)
+
+    demo_tools = subparsers.add_parser(
+        "demo-tools", help="run the Phase 2 tool + Docker sandbox demo"
+    )
+    _add_common_options(demo_tools, suppress_defaults=True)
+
+    tools = subparsers.add_parser("tools", help="list tool contracts")
+    _add_common_options(tools, suppress_defaults=True)
+
+    tool_calls = subparsers.add_parser(
+        "tool-calls", help="show tool invocation audit records"
+    )
+    _add_common_options(tool_calls, suppress_defaults=True)
+    tool_calls.add_argument("--workflow", help="filter by workflow id")
+    tool_calls.add_argument("--task", help="filter by task id")
+    tool_calls.add_argument("--agent", help="filter by agent id")
+    tool_calls.add_argument("--limit", type=int, default=100)
 
     run = subparsers.add_parser("run", help="execute a goal")
     _add_common_options(run, suppress_defaults=True)
@@ -183,6 +220,8 @@ async def _dispatch(args: argparse.Namespace) -> int:
     command = args.command
     if command == "demo":
         return await _cmd_demo(args)
+    if command == "demo-tools":
+        return await _cmd_demo_tools(args)
     if command == "run":
         return await _cmd_run(args)
     if command == "chat":
@@ -191,6 +230,10 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return await _cmd_repl(args)
     if command == "agents":
         return _cmd_agents(args)
+    if command == "tools":
+        return await _cmd_tools(args)
+    if command == "tool-calls":
+        return _cmd_tool_calls(args)
     if command == "tasks":
         return _cmd_tasks(args)
     if command == "messages":
@@ -248,6 +291,68 @@ async def _cmd_demo(args: argparse.Namespace) -> int:
                 )
             )
         return 0
+
+
+async def _cmd_demo_tools(args: argparse.Namespace) -> int:
+    available, detail = await asyncio.to_thread(DockerSandbox.check_available)
+    if not available:
+        console.print(
+            Panel(
+                Text(
+                    "The Phase 2 end-to-end demo requires Docker. No host-side "
+                    "Python fallback is used.\n\n"
+                    f"Detected: {detail}\n\n"
+                    "Required:\n"
+                    "  1. Install Docker Desktop with WSL2.\n"
+                    "  2. Start Docker Desktop.\n"
+                    "  3. Verify: docker info\n"
+                    "  4. Run: agentforge demo-tools\n\n"
+                    "Docker integration tests will be SKIPPED until this is fixed; "
+                    "non-Docker unit tests still run.",
+                    style="yellow",
+                ),
+                title="Docker prerequisite missing",
+                style="red",
+            )
+        )
+        return 2
+
+    settings = _make_settings(args)
+    explicit_real = getattr(args, "provider", None) in {"deepseek", "hkgai"}
+    if not explicit_real:
+        settings = settings.mock_copy()
+    if not settings.tools_enabled:
+        console.print(Text("tools are disabled in configuration", style="red"))
+        return 2
+
+    async with AgentForgeRuntime(settings) as runtime:
+        console.rule("[bold]AgentForge Phase 2 Tool + Sandbox Demo[/bold]")
+        console.print(Text(f"Docker: {detail}", style="green"))
+        console.print(
+            Text(
+                f"Provider: {runtime.provider_name} ({runtime.provider_model})",
+                style="bold yellow" if runtime.provider_name == "mock" else "bold",
+            )
+        )
+        console.print(Text(f"Goal: {PHASE2_GOAL}", style="bold"))
+        console.print()
+        workflow = await runtime.submit_goal(PHASE2_GOAL)
+        _render_workflow(console, runtime.store, workflow)
+        _print_persistence(console, runtime)
+        if runtime.provider_name == "mock":
+            console.print(
+                Panel(
+                    Text(
+                        "LLM decisions are deterministic mock fixtures. File writes, "
+                        "Python execution, stdout/stderr, exit codes, permissions and "
+                        "the tool audit are real. Docker sandbox isolation is real; "
+                        "no host-side Python fallback exists.",
+                        style="yellow",
+                    ),
+                    title="Mock provider / real tools",
+                )
+            )
+        return 0 if workflow.status == WorkflowStatus.COMPLETED else 1
 
 
 async def _cmd_run(args: argparse.Namespace) -> int:
@@ -364,6 +469,8 @@ async def _handle_repl_command(line: str, runtime: AgentForgeRuntime) -> bool:
             Panel(
                 Text(
                     "/agents                       list agents and capabilities\n"
+                    "/tools                        list tool contracts\n"
+                    "/tool-calls [workflow_id]     tool audit records\n"
                     "/dm <agent_id> <message>      private message to one agent\n"
                     "/goal <text>                  publish a goal to a group workflow\n"
                     "/tasks [workflow_id]          task status\n"
@@ -381,6 +488,14 @@ async def _handle_repl_command(line: str, runtime: AgentForgeRuntime) -> bool:
 
     if command == "/agents":
         _print_agents(console)
+        return True
+
+    if command == "/tools":
+        _print_tool_specs(console, runtime.list_tool_specs())
+        return True
+
+    if command == "/tool-calls":
+        _print_tool_calls(console, runtime.list_tool_calls(rest or None))
         return True
 
     if command == "/dm":
@@ -446,6 +561,48 @@ async def _handle_repl_command(line: str, runtime: AgentForgeRuntime) -> bool:
 # ------------------------------------------------------------------- read-only cmds
 def _cmd_agents(args: argparse.Namespace) -> int:
     _print_agents(console)
+    return 0
+
+
+async def _cmd_tools(args: argparse.Namespace) -> int:
+    settings = _make_settings(args)
+    settings.ensure_directories()
+    store = SQLiteStore(settings.resolved_sqlite_file)
+    workspaces = WorkspaceManager(settings.resolved_workspace_root)
+    try:
+        built = build_default_tools(
+            settings,
+            workspaces=workspaces,
+            artifacts=ArtifactStore(
+                settings.resolved_artifacts_root,
+                workspaces,
+                store,
+                max_bytes=settings.max_file_bytes,
+            ),
+        )
+        try:
+            _print_tool_specs(console, built.registry.list_specs())
+        finally:
+            await built.search_provider.aclose()
+    finally:
+        store.close()
+    return 0
+
+
+def _cmd_tool_calls(args: argparse.Namespace) -> int:
+    store = _open_store(args)
+    if store is None:
+        return 0
+    try:
+        records = store.list_tool_calls(
+            args.workflow,
+            task_id=args.task,
+            agent_id=args.agent,
+            limit=args.limit,
+        )
+        _print_tool_calls(console, records)
+    finally:
+        store.close()
     return 0
 
 
@@ -619,6 +776,69 @@ def _print_agents(output: Console) -> None:
     output.print(table)
 
 
+def _print_tool_specs(output: Console, specs: list) -> None:
+    if not specs:
+        output.print(Text("No tools are enabled.", style="dim"))
+        return
+    table = Table(title="Tool contracts")
+    table.add_column("Tool", style="bold cyan")
+    table.add_column("Permissions")
+    table.add_column("Timeout", justify="right")
+    table.add_column("Approval")
+    table.add_column("Untrusted", justify="center")
+    table.add_column("Description")
+    for spec in specs:
+        table.add_row(
+            spec.name,
+            ", ".join(permission.value for permission in spec.permissions) or "-",
+            f"{spec.timeout_seconds:g}s",
+            "required" if spec.requires_approval else "no",
+            "yes" if spec.untrusted_output else "no",
+            spec.description,
+        )
+    output.print(table)
+
+
+def _print_tool_calls(output: Console, records: list[ToolCallRecord]) -> None:
+    if not records:
+        output.print(Text("No tool calls found.", style="dim"))
+        return
+    table = Table(title=f"Tool calls ({len(records)})", show_lines=True)
+    table.add_column("Time", style="dim")
+    table.add_column("Agent")
+    table.add_column("Tool", style="bold")
+    table.add_column("Status")
+    table.add_column("Duration", justify="right")
+    table.add_column("Output / error")
+    for record in records:
+        if record.output.get("stdout"):
+            preview = str(record.output["stdout"])
+        elif record.output.get("content"):
+            preview = str(record.output["content"])
+        elif record.error:
+            preview = record.error
+        else:
+            preview = json.dumps(record.output, ensure_ascii=False)
+        preview = preview.replace("\n", " ")
+        if len(preview) > 260:
+            preview = preview[:260] + "..."
+        table.add_row(
+            record.started_at.strftime("%H:%M:%S"),
+            record.agent_id,
+            record.tool_name,
+            Text(
+                record.status.value,
+                style=STATUS_STYLES.get(
+                    record.status.value,
+                    "yellow" if record.status.value == "pending_approval" else "white",
+                ),
+            ),
+            f"{record.duration_seconds:.3f}s",
+            preview,
+        )
+    output.print(table)
+
+
 def _render_workflow(
     output: Console,
     store: SQLiteStore,
@@ -665,6 +885,11 @@ def _render_workflow(
         )
     output.print(table)
 
+    tool_records = store.list_tool_calls(workflow.workflow_id)
+    if tool_records:
+        output.rule("[bold]Tool execution[/bold]")
+        _print_tool_calls(output, tool_records)
+
     review_tasks = [
         task for task in tasks if task.metadata.get("kind") == "review" and task.result
     ]
@@ -696,6 +921,11 @@ def _print_metrics(output: Console, workflow: Workflow) -> None:
     )
     table.add_row("Failed / blocked tasks", f"{metrics.failed_tasks} / {metrics.blocked_tasks}")
     table.add_row("LLM calls", str(metrics.llm_calls))
+    table.add_row(
+        "Tool calls / failures",
+        f"{metrics.tool_calls} / {metrics.tool_failures}",
+    )
+    table.add_row("Summed tool time", f"{metrics.tool_seconds:.3f}s")
     table.add_row(
         "Tokens (prompt / completion)",
         f"{metrics.prompt_tokens} / {metrics.completion_tokens}",

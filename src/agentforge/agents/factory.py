@@ -11,6 +11,7 @@ from agentforge.llm.base import BaseLLMProvider
 from agentforge.memory.base import MemoryStore
 from agentforge.models.agent import AgentProfile, AgentRole
 from agentforge.tools.base import ToolRegistry
+from agentforge.tools.executor import ToolExecutor
 
 DEFAULT_PROFILES: list[AgentProfile] = [
     AgentProfile(
@@ -93,6 +94,8 @@ def build_default_agents(
     memory: MemoryStore,
     tools: ToolRegistry,
     memory_recall_limit: int = 4,
+    tool_executor: ToolExecutor | None = None,
+    max_tool_calls: int = 6,
 ) -> list[BaseAgent]:
     agents: list[BaseAgent] = []
     for profile in DEFAULT_PROFILES:
@@ -104,6 +107,8 @@ def build_default_agents(
                 memory=memory,
                 tools=tools,
                 memory_recall_limit=memory_recall_limit,
+                tool_executor=tool_executor,
+                max_tool_calls=max_tool_calls,
             )
         )
     return agents

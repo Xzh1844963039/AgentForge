@@ -10,6 +10,7 @@ steps prevent runaway loops.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -44,6 +45,7 @@ from agentforge.orchestration.errors import (
 from agentforge.orchestration.state_machine import transition_task
 from agentforge.persistence.database import SQLiteStore
 from agentforge.persistence.events import EventLogger
+from agentforge.tools.base import ToolExecutionContext
 
 logger = logging.getLogger("agentforge.orchestration")
 
@@ -83,6 +85,7 @@ class TaskOrchestrator:
         store: SQLiteStore,
         events: EventLogger,
         settings: Settings,
+        tool_context_factory: Callable[[Task], ToolExecutionContext] | None = None,
     ) -> None:
         self.agents = agents
         self.bus = bus
@@ -90,6 +93,7 @@ class TaskOrchestrator:
         self.store = store
         self.events = events
         self.settings = settings
+        self.tool_context_factory = tool_context_factory
         self.coordinator = agents.require_role(AgentRole.COORDINATOR)
         self.assigner = CapabilityAssigner(agents.cards())
         self._review_enabled = (
@@ -104,7 +108,7 @@ class TaskOrchestrator:
             conversation_id=conversation_id,
             status=WorkflowStatus.RUNNING,
             metadata={
-                "phase": 1,
+                "phase": 2,
                 "provider": self.coordinator.provider.name,
                 "review_enabled": self._review_enabled,
             },
@@ -476,6 +480,11 @@ class TaskOrchestrator:
                 goal=ctx.workflow.goal,
                 dependency_results=dependency_results,
                 delegated_results=child_results,
+                tool_context=(
+                    self.tool_context_factory(task)
+                    if self.tool_context_factory is not None
+                    else None
+                ),
             )
         except Exception as exc:
             finished_at = utc_now()
@@ -498,26 +507,14 @@ class TaskOrchestrator:
             return
 
         finished_at = utc_now()
-        execution_status = (
-            ExecutionStatus.FAILED
-            if result.action.action == AgentActionType.FAIL
-            else ExecutionStatus.COMPLETED
-        )
-        self._save_execution(
+        self._save_agent_calls(
             ctx,
             task,
             agent.agent_id,
             purpose,
+            result,
             started_at,
             finished_at,
-            execution_status,
-            error=result.action.error if execution_status == ExecutionStatus.FAILED else None,
-            response=result,
-            extra_metadata={
-                "parse_warning": result.parse_warning,
-                "memory_hits": len(result.memory_hits),
-                "action": result.action.action.value,
-            },
         )
 
         try:
@@ -770,6 +767,79 @@ class TaskOrchestrator:
             metadata={"workflow_id": ctx.workflow.workflow_id},
         )
 
+    def _save_agent_calls(
+        self,
+        ctx: _RunContext,
+        task: Task,
+        agent_id: str,
+        purpose: str,
+        result: AgentRunResult,
+        started_at: datetime,
+        finished_at: datetime,
+    ) -> None:
+        """Record every LLM turn, including intermediate tool-call turns."""
+        if not result.calls:
+            self._save_execution(
+                ctx,
+                task,
+                agent_id,
+                purpose,
+                started_at,
+                finished_at,
+                (
+                    ExecutionStatus.FAILED
+                    if result.action.action == AgentActionType.FAIL
+                    else ExecutionStatus.COMPLETED
+                ),
+                error=result.action.error,
+                response=result,
+            )
+            return
+
+        for index, call in enumerate(result.calls):
+            is_last = index == len(result.calls) - 1
+            status = (
+                ExecutionStatus.FAILED
+                if is_last and result.action.action == AgentActionType.FAIL
+                else ExecutionStatus.COMPLETED
+            )
+            execution = AgentExecution(
+                workflow_id=ctx.workflow.workflow_id,
+                task_id=task.task_id,
+                agent_id=agent_id,
+                purpose=purpose,
+                provider=call.response.provider,
+                model=call.response.model,
+                started_at=call.started_at,
+                finished_at=call.finished_at,
+                status=status,
+                error=result.action.error if status == ExecutionStatus.FAILED else None,
+                prompt_tokens=call.response.usage.prompt_tokens,
+                completion_tokens=call.response.usage.completion_tokens,
+                latency_ms=call.response.latency_ms,
+                metadata={
+                    "step": index + 1,
+                    "final": is_last,
+                    "action": (
+                        result.action.action.value if is_last else "tool_call"
+                    ),
+                    "tool_results": len(result.tool_results),
+                    "parse_warning": result.parse_warning if is_last else None,
+                },
+            )
+            self.store.save_execution(execution)
+            self.events.event(
+                "agent_execution",
+                workflow_id=ctx.workflow.workflow_id,
+                execution_id=execution.execution_id,
+                task_id=task.task_id,
+                agent_id=agent_id,
+                purpose=purpose,
+                step=index + 1,
+                status=status.value,
+                error=execution.error,
+            )
+
     def _save_execution(
         self,
         ctx: _RunContext,
@@ -940,6 +1010,7 @@ class TaskOrchestrator:
             executions,
             started_at=workflow.created_at,
             finished_at=workflow.finished_at,
+            tool_calls=self.store.list_tool_calls(workflow.workflow_id),
         )
         self.store.save_workflow(workflow)
         self.events.event(

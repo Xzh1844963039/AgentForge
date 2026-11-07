@@ -29,11 +29,24 @@ from agentforge.models.message import (
     MessageType,
 )
 from agentforge.models.task import Task
+from agentforge.models.tool import ToolCallRecord
 from agentforge.models.workflow import Workflow
 from agentforge.orchestration.orchestrator import TaskOrchestrator
 from agentforge.persistence.database import SQLiteStore
 from agentforge.persistence.events import EventLogger
-from agentforge.tools.base import ToolRegistry
+from agentforge.sandbox.base import SandboxConfig
+from agentforge.sandbox.manager import SandboxManager
+from agentforge.tools.approval import ApprovalGate, PendingApprovalGate
+from agentforge.tools.artifact_store import ArtifactStore
+from agentforge.tools.base import (
+    ToolExecutionContext,
+    ToolRegistry,
+    ToolSpec,
+)
+from agentforge.tools.builtins import build_default_tools
+from agentforge.tools.executor import ToolExecutor
+from agentforge.tools.policy import ToolPermissionPolicy
+from agentforge.tools.workspace import WorkspaceManager
 
 logger = logging.getLogger("agentforge.runtime")
 
@@ -46,13 +59,14 @@ class ChatExchange(BaseModel):
 
 
 class AgentForgeRuntime:
-    """Fully assembled Phase 1 runtime."""
+    """Fully assembled AgentForge runtime."""
 
     def __init__(
         self,
         settings: Settings | None = None,
         *,
         provider: BaseLLMProvider | None = None,
+        approval_gate: ApprovalGate | None = None,
     ) -> None:
         self.settings = settings or Settings()
         self.settings.ensure_directories()
@@ -66,7 +80,52 @@ class AgentForgeRuntime:
         self.store = SQLiteStore(self.settings.resolved_sqlite_file)
         self.events = EventLogger(self.settings.resolved_events_file)
         self.memory = SQLiteMemoryStore(self.store)
-        self.tools = ToolRegistry()
+
+        self.workspaces = WorkspaceManager(self.settings.resolved_workspace_root)
+        self.sandboxes = SandboxManager(
+            SandboxConfig(
+                image=self.settings.sandbox_image,
+                workspace_root=self.settings.resolved_workspace_root,
+                cpu_limit=self.settings.sandbox_cpu_limit,
+                memory_limit_mb=self.settings.sandbox_memory_mb,
+                pids_limit=self.settings.sandbox_pids_limit,
+                timeout_seconds=self.settings.sandbox_timeout_seconds,
+                output_limit_bytes=self.settings.sandbox_output_limit_bytes,
+                network_enabled=self.settings.sandbox_network_enabled,
+                container_user=self.settings.sandbox_container_user,
+                read_only_root=self.settings.sandbox_read_only_root,
+                tmpfs_size_mb=self.settings.sandbox_tmpfs_size_mb,
+                max_code_bytes=self.settings.max_file_bytes,
+            ),
+            workspaces=self.workspaces,
+        )
+        self.artifacts = ArtifactStore(
+            self.settings.resolved_artifacts_root,
+            self.workspaces,
+            self.store,
+            max_bytes=self.settings.max_file_bytes,
+        )
+        built_tools = build_default_tools(
+            self.settings,
+            workspaces=self.workspaces,
+            artifacts=self.artifacts,
+        )
+        self.tools: ToolRegistry = built_tools.registry
+        self.search_provider = built_tools.search_provider
+        self.tool_policy = ToolPermissionPolicy()
+        self.approval_gate = approval_gate or PendingApprovalGate()
+        self.tool_executor = (
+            ToolExecutor(
+                self.tools,
+                self.store,
+                self.events,
+                self.tool_policy,
+                self.approval_gate,
+                max_output_bytes=self.settings.tool_output_limit_bytes,
+            )
+            if self.settings.tools_enabled
+            else None
+        )
 
         self.agents = AgentRegistry()
         for agent in build_default_agents(
@@ -74,6 +133,8 @@ class AgentForgeRuntime:
             memory=self.memory,
             tools=self.tools,
             memory_recall_limit=4,
+            tool_executor=self.tool_executor,
+            max_tool_calls=self.settings.max_tool_calls_per_task,
         ):
             self.agents.register(agent)
 
@@ -94,12 +155,15 @@ class AgentForgeRuntime:
             store=self.store,
             events=self.events,
             settings=self.settings,
+            tool_context_factory=self._tool_context_for_task,
         )
         self.events.event(
             "runtime_initialized",
             provider=self.provider.name,
             model=self.provider.model,
             agent_ids=[agent.agent_id for agent in self.agents.list()],
+            tool_names=self.tools.names(),
+            search_provider=self.search_provider.name,
             sqlite_path=str(self.store.path),
         )
         self._closed = False
@@ -109,6 +173,14 @@ class AgentForgeRuntime:
         if self._closed:
             return
         self._closed = True
+        try:
+            await self.sandboxes.aclose()
+        except Exception:
+            logger.exception("failed to close sandboxes")
+        try:
+            await self.search_provider.aclose()
+        except Exception:
+            logger.exception("failed to close search provider")
         await self.provider.aclose()
         self.events.close()
         self.store.close()
@@ -125,6 +197,42 @@ class AgentForgeRuntime:
 
     def get_agent(self, agent_id: str) -> BaseAgent:
         return self.agents.require(agent_id)
+
+    # -------------------------------------------------------------------- tools
+    def list_tool_specs(self) -> list[ToolSpec]:
+        return self.tools.list_specs()
+
+    def list_tool_calls(
+        self,
+        workflow_id: str | None = None,
+        *,
+        task_id: str | None = None,
+        agent_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[ToolCallRecord]:
+        return self.store.list_tool_calls(
+            workflow_id, task_id=task_id, agent_id=agent_id, limit=limit
+        )
+
+    def sandbox_status(self) -> dict[str, str]:
+        return self.sandboxes.status()
+
+    def _tool_context_for_task(self, task: Task) -> ToolExecutionContext:
+        if not task.assigned_agent:
+            raise ValueError("cannot build a tool context for an unassigned task")
+        sandbox = (
+            self.sandboxes.get(task.assigned_agent)
+            if self.tool_executor is not None
+            else None
+        )
+        return ToolExecutionContext(
+            agent_id=task.assigned_agent,
+            workflow_id=task.workflow_id,
+            task_id=task.task_id,
+            workspace=self.workspaces.workspace_for(task.assigned_agent),
+            sandbox=sandbox,
+            metadata={"sandbox_manager": "docker"},
+        )
 
     # ------------------------------------------------------------------ workflows
     async def submit_goal(

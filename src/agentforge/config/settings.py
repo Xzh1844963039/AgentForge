@@ -67,6 +67,43 @@ class Settings(BaseSettings):
     max_tasks_per_workflow: int = Field(default=60, ge=1, le=500)
     enable_final_review: bool = True
 
+    # --- Tools -----------------------------------------------------------------
+    tools_enabled: bool = True
+    max_tool_calls_per_task: int = Field(default=6, ge=1, le=30)
+    tool_output_limit_bytes: int = Field(default=65_536, ge=1024)
+    workspace_root: Path | None = None
+    artifacts_root: Path | None = None
+    max_file_bytes: int = Field(default=262_144, ge=1024, le=5_000_000)
+    max_workspace_files: int = Field(default=200, ge=1, le=2000)
+
+    # --- Docker sandbox --------------------------------------------------------
+    sandbox_image: str = "python:3.11-slim"
+    sandbox_cpu_limit: float = Field(default=1.0, gt=0, le=16)
+    sandbox_memory_mb: int = Field(default=256, ge=64, le=8192)
+    sandbox_pids_limit: int = Field(default=64, ge=16, le=4096)
+    sandbox_timeout_seconds: int = Field(default=30, ge=1, le=600)
+    sandbox_output_limit_bytes: int = Field(default=65_536, ge=1024)
+    sandbox_network_enabled: bool = False
+    sandbox_container_user: str = "65534:65534"
+    sandbox_read_only_root: bool = True
+    sandbox_tmpfs_size_mb: int = Field(default=64, ge=8, le=1024)
+
+    # --- Search ----------------------------------------------------------------
+    search_provider: Literal["mock", "http"] = "mock"
+    search_endpoint: str | None = None
+    search_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AGENTFORGE_SEARCH_API_KEY", "SEARCH_API_KEY"),
+    )
+    search_timeout: float = Field(default=15.0, gt=0)
+    search_max_results: int = Field(default=5, ge=1, le=10)
+    web_fetch_max_bytes: int = Field(default=262_144, ge=1024, le=1_048_576)
+    web_fetch_max_redirects: int = Field(default=3, ge=0, le=10)
+
+    # --- Local Git tools -------------------------------------------------------
+    git_repo_root: Path | None = None
+    git_timeout: float = Field(default=30.0, gt=0)
+
     # --- Persistence / observability -------------------------------------------
     data_dir: Path = Path("data")
     sqlite_file: Path | None = None
@@ -83,11 +120,21 @@ class Settings(BaseSettings):
     def resolved_events_file(self) -> Path:
         return self.events_file or (self.data_dir / "events.jsonl")
 
+    @property
+    def resolved_workspace_root(self) -> Path:
+        return self.workspace_root or (self.data_dir / "workspaces")
+
+    @property
+    def resolved_artifacts_root(self) -> Path:
+        return self.artifacts_root or (self.data_dir / "artifacts")
+
     def ensure_directories(self) -> None:
         """Create the data/output directories required by the runtime."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.resolved_sqlite_file.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_events_file.parent.mkdir(parents=True, exist_ok=True)
+        self.resolved_workspace_root.mkdir(parents=True, exist_ok=True)
+        self.resolved_artifacts_root.mkdir(parents=True, exist_ok=True)
         if self.log_file is not None:
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
 

@@ -1,6 +1,6 @@
 """Memory package.
 
-TODO (Phase 2): implement summarisation, reflection, importance decay,
+TODO (Phase 3): implement summarisation, reflection, importance decay,
 forgetting, and embedding-based retrieval; evolve successful strategies into
 reusable procedural memory.
 """

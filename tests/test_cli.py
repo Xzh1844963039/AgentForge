@@ -7,6 +7,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+from agentforge.models.common import utc_now
+from agentforge.models.tool import (
+    ApprovalStatus,
+    PermissionDecision,
+    ToolCallRecord,
+    ToolResultStatus,
+)
+from agentforge.persistence import SQLiteStore
+from agentforge.sandbox.docker import DockerSandbox
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -76,3 +86,64 @@ def test_cli_agents_needs_no_database(tmp_path):
     assert "CoordinatorAgent" in result.stdout
     assert "ResearchAgent" in result.stdout
     assert "ReviewerAgent" in result.stdout
+
+
+def test_cli_tools_catalog(tmp_path):
+    result = run_cli(tmp_path, "tools")
+    assert result.returncode == 0, result.stderr
+    assert "Tool contracts" in result.stdout
+    for tool in (
+        "list_files",
+        "write_file",
+        "delete_file",
+        "python_execute",
+        "python_syntax_check",
+        "web_search",
+        "fetch_webpage",
+        "share_artifact",
+    ):
+        assert tool in result.stdout
+
+
+def test_cli_demo_tools_reports_docker_prerequisite(tmp_path):
+    result = run_cli(tmp_path, "demo-tools")
+    available, _ = DockerSandbox.check_available()
+    if available:
+        assert result.returncode == 0, result.stderr
+        assert "Phase 2 Tool + Sandbox Demo" in result.stdout
+    else:
+        assert result.returncode == 2
+        assert "Docker prerequisite missing" in result.stdout
+        assert "No host-side Python fallback" in result.stdout
+
+
+def test_cli_tool_calls_reads_audit(tmp_path):
+    data_dir = tmp_path / "cli-data"
+    data_dir.mkdir(parents=True)
+    store = SQLiteStore(data_dir / "agentforge.db")
+    now = utc_now()
+    store.save_tool_call(
+        ToolCallRecord(
+            tool_call_id="tc_cli",
+            workflow_id="wf_cli",
+            task_id="task_cli",
+            agent_id="coding",
+            tool_name="echo_demo",
+            arguments={"text": "hello"},
+            status=ToolResultStatus.SUCCESS,
+            output={"text": "hello"},
+            duration_seconds=0.002,
+            permission_decision=PermissionDecision.ALLOWED,
+            approval_status=ApprovalStatus.NOT_REQUIRED,
+            permissions=[],
+            started_at=now,
+            finished_at=now,
+        )
+    )
+    store.close()
+
+    result = run_cli(tmp_path, "tool-calls")
+    assert result.returncode == 0, result.stderr
+    assert "echo_demo" in result.stdout
+    assert "success" in result.stdout
+    assert "Tool calls" in result.stdout

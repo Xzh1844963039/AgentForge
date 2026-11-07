@@ -6,6 +6,7 @@ from datetime import datetime
 
 from agentforge.models.execution import AgentExecution
 from agentforge.models.task import Task, TaskStatus
+from agentforge.models.tool import ToolCallRecord, ToolResultStatus
 from agentforge.models.workflow import WorkflowMetrics
 
 
@@ -15,6 +16,7 @@ def compute_workflow_metrics(
     *,
     started_at: datetime,
     finished_at: datetime,
+    tool_calls: list[ToolCallRecord] | None = None,
 ) -> WorkflowMetrics:
     """Compute completion rate, timing, delegation and token metrics.
 
@@ -42,6 +44,7 @@ def compute_workflow_metrics(
             task_seconds += duration
 
     total_seconds = max(0.0, (finished_at - started_at).total_seconds())
+    tool_calls = tool_calls or []
 
     return WorkflowMetrics(
         total_tasks=total,
@@ -56,4 +59,9 @@ def compute_workflow_metrics(
         completion_tokens=completion_tokens,
         total_execution_seconds=total_seconds,
         total_task_seconds=task_seconds,
+        tool_calls=len(tool_calls),
+        tool_failures=sum(
+            1 for call in tool_calls if call.status != ToolResultStatus.SUCCESS
+        ),
+        tool_seconds=sum(call.duration_seconds for call in tool_calls),
     )

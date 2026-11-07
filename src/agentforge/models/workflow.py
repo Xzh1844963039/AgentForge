@@ -31,6 +31,9 @@ class WorkflowMetrics(BaseModel):
     completion_tokens: int = 0
     total_execution_seconds: float = 0.0
     total_task_seconds: float = 0.0
+    tool_calls: int = 0
+    tool_failures: int = 0
+    tool_seconds: float = 0.0
 
 
 class Workflow(BaseModel):

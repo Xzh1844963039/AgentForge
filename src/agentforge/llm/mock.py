@@ -171,6 +171,106 @@ The draft is coherent, technically feasible, and correctly frames multi-agent sy
 
 Approved for implementation planning with the issues above tracked as Phase 1/2 hardening items. The core architecture does not need to change."""
 
+_PRIME_PLAN = {
+    "goal_summary": (
+        "Create a sandboxed Python prime-number script, execute it, verify the "
+        "output, and produce a Markdown report."
+    ),
+    "subtasks": [
+        {
+            "key": "implement_primes",
+            "description": (
+                "Use python_syntax_check and python_execute to create and run a "
+                "Python script named primes.py that calculates prime numbers. "
+                "Report the script path, stdout, stderr and exit code."
+            ),
+            "required_capabilities": ["coding"],
+            "depends_on": [],
+            "kind": "coding",
+        }
+    ],
+}
+
+_PRIME_CODE = '''def primes(limit: int = 20) -> list[int]:
+    values = []
+    for candidate in range(2, limit + 1):
+        if all(candidate % divisor for divisor in range(2, int(candidate ** 0.5) + 1)):
+            values.append(candidate)
+    return values
+
+
+if __name__ == "__main__":
+    print("Primes up to 20:", primes(20))
+'''
+
+_PRIME_SYNTHESIS = """# Draft: Prime-Number Script and Execution
+
+## Implementation
+
+The CodingAgent used the sandboxed `python_syntax_check` and `python_execute` tools. The script defines a `primes(limit)` function that tests every candidate with trial division up to its integer square root and prints the primes up to 20.
+
+## Verification evidence
+
+The agent reported the real tool results: the generated script path, syntax-check status, process exit code, stdout and stderr. The Reviewer should confirm that the printed sequence is exactly `[2, 3, 5, 7, 11, 13, 17, 19]` and that no host-side execution occurred.
+
+## Gaps
+
+The workflow depends on Docker availability. If the sandbox is unavailable, the execution tool must fail explicitly instead of running code on the host."""
+
+_PRIME_REVIEW = """Verdict: APPROVED_WITH_ISSUES
+
+## Summary
+
+The implementation and its execution evidence are technically sound. The prime list is correct for the stated limit, and the script is short enough to inspect manually. The main residual risk is environmental: execution requires a working Docker daemon and the isolation limits must be verified on the target machine.
+
+## Issues
+
+1. **Docker prerequisite.** The end-to-end result is only valid when the Docker sandbox actually started; a host fallback would invalidate the isolation claim.
+2. **Input bounds.** The script has no guard for negative or very large limits; a production version should validate input.
+3. **Test coverage.** The demo verifies one invocation but does not include a unittest suite or edge cases.
+
+## Suggestions
+
+- Keep execution inside the non-root, network-disabled container.
+- Add bounds checks and a unittest for `primes`.
+- Preserve stdout, stderr and exit code in the final report and tool audit.
+
+## Decision
+
+Approved for the Phase 2 demonstration, with the above issues noted."""
+
+_PRIME_FINAL_TEMPLATE = """# Phase 2 Tool Demo Report: Prime-Number Script
+
+## 1. Objective
+
+Create a Python script that calculates prime numbers, execute it in an isolated sandbox, verify the output, and summarize the implementation and test results.
+
+## 2. Implementation
+
+The CodingAgent generated `primes.py` and used the tool dispatcher:
+
+1. `python_syntax_check` validated the source without executing it.
+2. `python_execute` wrote the script into the agent's private workspace and ran it inside the Docker sandbox.
+3. The returned exit code and stdout were fed back into the agent's reasoning loop.
+
+## 3. Execution evidence
+
+The sandbox returned:
+
+```text
+{stdout}
+```
+
+Exit code: `{exit_code}`. The tool audit records the script path, duration, permissions and sandbox metadata.
+
+## 4. Review
+
+The Reviewer approved the result with issues. The prime sequence is correct, but input bounds and a unittest suite should be added. Docker availability is a hard prerequisite; the implementation never falls back to host execution.
+
+## 5. Limitations
+
+This demonstration validates tool dispatch, private file operations, sandbox execution and result propagation. It does not validate internet search or GitHub operations; those have separate tests and provider configurations."""
+
 _FINAL = """# Final Report: Multi-Agent Systems and a Reviewed Python Implementation Plan
 
 ## Executive summary
@@ -341,19 +441,31 @@ class MockProvider(BaseLLMProvider):
 
     def _plan_json(self, prompt: str) -> str:
         goal = _extract_section(prompt, "GOAL") or _PLAN["goal_summary"]
-        plan = dict(_PLAN)
-        plan["goal_summary"] = goal[:500]
-        plan["subtasks"] = [dict(item) for item in _PLAN["subtasks"]]
+        source = _PRIME_PLAN if "prime" in goal.lower() else _PLAN
+        plan = {
+            "goal_summary": goal[:500],
+            "subtasks": [dict(item) for item in source["subtasks"]],
+        }
         return json.dumps(plan, indent=2, ensure_ascii=False)
 
     def _execute_content(self, kind: str, role: str, prompt: str) -> str:
-        content = {
-            "research": _RESEARCH,
-            "coding": _CODING,
-            "synthesis": _SYNTHESIS,
-            "review": _REVIEW,
-            "finalize": self._finalize_content(prompt),
-        }.get(kind)
+        is_prime = "prime" in prompt.lower()
+        if kind == "coding" and is_prime:
+            return self._prime_coding_response(prompt)
+        if kind == "synthesis" and is_prime:
+            content = _PRIME_SYNTHESIS
+        elif kind == "review" and is_prime:
+            content = _PRIME_REVIEW
+        elif kind == "finalize" and is_prime:
+            content = self._prime_final_content(prompt)
+        else:
+            content = {
+                "research": _RESEARCH,
+                "coding": _CODING,
+                "synthesis": _SYNTHESIS,
+                "review": _REVIEW,
+                "finalize": self._finalize_content(prompt),
+            }.get(kind)
 
         if content is None:
             if kind == "delegated":
@@ -375,6 +487,89 @@ class MockProvider(BaseLLMProvider):
                 ),
             },
             ensure_ascii=False,
+        )
+
+    def _prime_coding_response(self, prompt: str) -> str:
+        results = _extract_last_tool_results(prompt)
+        if results is None:
+            return _mock_action(
+                {
+                    "action": "tool_call",
+                    "tool_calls": [
+                        {
+                            "name": "python_syntax_check",
+                            "arguments": {
+                                "code": _PRIME_CODE,
+                                "filename": "primes.py",
+                            },
+                        }
+                    ],
+                    "reasoning": "Validate syntax before executing the script.",
+                }
+            )
+
+        last = results[-1] if results else {}
+        status = last.get("status")
+        if status != "success":
+            return _mock_action(
+                {
+                    "action": "fail",
+                    "error": (
+                        f"tool {last.get('tool', 'unknown')} failed: "
+                        f"{last.get('error') or status}"
+                    ),
+                    "content": "The sandbox tool did not complete successfully.",
+                }
+            )
+
+        if last.get("tool") == "python_syntax_check":
+            return _mock_action(
+                {
+                    "action": "tool_call",
+                    "tool_calls": [
+                        {
+                            "name": "python_execute",
+                            "arguments": {
+                                "code": _PRIME_CODE,
+                                "filename": "primes.py",
+                            },
+                        }
+                    ],
+                    "reasoning": "Syntax is valid; execute in the Docker sandbox.",
+                }
+            )
+
+        output = last.get("output", {})
+        stdout = str(output.get("stdout", "")).strip()
+        stderr = str(output.get("stderr", "")).strip()
+        exit_code = output.get("exit_code")
+        content = (
+            "## Prime-number implementation\n\n"
+            "The script was created and executed through the tool dispatcher.\n\n"
+            "```python\n"
+            f"{_PRIME_CODE}"
+            "```\n\n"
+            "### Execution result\n\n"
+            f"- Script path: `{output.get('script_path', 'scripts/primes.py')}`\n"
+            f"- Exit code: `{exit_code}`\n"
+            f"- stdout:\n```text\n{stdout or '(empty)'}\n```\n"
+            f"- stderr:\n```text\n{stderr or '(empty)'}\n```\n\n"
+            "The sandbox returned the real process output; no host execution was used."
+        )
+        return _mock_action(
+            {
+                "action": "complete",
+                "content": content,
+                "reasoning": "The sandbox execution succeeded and stdout was captured.",
+            }
+        )
+
+    def _prime_final_content(self, prompt: str) -> str:
+        stdout_match = re.search(r"Primes up to 20:\s*\[[^\]]*\]", prompt)
+        exit_match = re.search(r"Exit code:\s*`?(\d+)`?", prompt)
+        return _PRIME_FINAL_TEMPLATE.format(
+            stdout=stdout_match.group(0) if stdout_match else "(not available)",
+            exit_code=exit_match.group(1) if exit_match else "unknown",
         )
 
     def _finalize_content(self, prompt: str) -> str:
@@ -414,3 +609,24 @@ def _extract_section(text: str, header: str) -> str:
     if match:
         tail = tail[: match.start()]
     return tail.strip()
+
+
+def _extract_last_tool_results(prompt: str) -> list[dict] | None:
+    marker = "[TOOL_RESULTS]"
+    index = prompt.rfind(marker)
+    if index == -1:
+        return None
+    tail = prompt[index + len(marker) :].lstrip()
+    try:
+        value, _end = json.JSONDecoder().raw_decode(tail)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        return [value]
+    return None
+
+
+def _mock_action(payload: dict) -> str:
+    return json.dumps(payload, ensure_ascii=False)
