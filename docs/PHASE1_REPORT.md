@@ -1,3 +1,5 @@
+> **Historical Phase 1 report.** Phase 2 subsequently implemented real tool execution and Docker sandbox isolation. See `docs/PHASE2_REPORT.md` for the current status. Docker integration remains unverified on this machine.
+
 # Phase 1 Report — AgentForge
 
 **Date:** 2026-11-07

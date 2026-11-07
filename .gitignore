@@ -17,13 +17,8 @@ env/
 .env.*
 !.env.example
 
-# Runtime data (SQLite, JSONL event logs, generated artifacts)
-data/*.db
-data/*.db-*
-data/*.jsonl
-data/*.log
-data/notes/
-data/workspace/
+# Runtime data (SQLite, JSONL logs, workspaces, artifacts, generated reports)
+data/*
 !data/.gitkeep
 
 # Test / tooling caches

@@ -1,21 +1,31 @@
 # AgentForge
 
-**A memory-evolving multi-agent collaborative platform with autonomous task delegation and sandboxed execution.**
+**A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, and Docker sandbox isolation.**
 
-AgentForge is a Python multi-agent runtime built for the HKUST NLP/Agent course final project. Phase 1 delivers a runnable, fully testable foundation:
+AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally; Phase 1 delivered the multi-agent runtime, and Phase 2 adds a validated tool-execution framework and a Docker-backed sandbox.
 
-- four specialised agents (Coordinator, Research, Coding, Reviewer),
-- LLM-driven dynamic task decomposition and capability-based assignment,
-- direct, group, and agent-to-agent messaging with durable replay,
-- a validated task DAG with bounded agent-initiated delegation,
-- independent review and final synthesis before the result reaches the human,
-- per-agent memory namespaces, SQLite persistence, JSONL event logs, and metrics,
-- a deterministic offline demo plus an interactive CLI.
+## Current status
 
-> **Phase 1 status (2026-11-07): complete and verified offline.**
-> 82 automated tests pass. Real DeepSeek/HKGAI API calls are **Pending** because no
-> API key was available during development. Mock output is deterministic test data
-> and is never presented as real LLM evaluation.
+| Phase | Status |
+|---|---|
+| Phase 1 — Runtime, messaging, DAG orchestration, persistence, CLI | ✅ complete |
+| Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ implemented; Docker integration **not verified** on this machine (Docker CLI unavailable) |
+| Phase 3 — Memory evolution | ⏳ next |
+| Phase 4 — Full human-in-the-loop | ⏳ planned |
+
+**Verified on 2026-11-07:** `175 passed, 5 skipped` in the full pytest suite, `76%` statement coverage, Ruff F/E9 clean. The 5 skips are 4 Docker-dependent tests and 1 Windows symlink-privilege test. Docker integration is **NOT VERIFIED**, not faked.
+
+Phase 2 highlights:
+
+- A unified `ToolExecutor` with JSON-Schema validation, per-agent permissions, timeouts, output limits, approval gates, and durable audit.
+- Agents request tools through structured `tool_call` actions, receive real structured results, and continue reasoning.
+- Private per-agent Markdown/TXT workspaces with path-traversal, absolute-path, symlink, Windows-device-name, size and count protections.
+- `python_execute`, `python_test`, `python_syntax_check`; Python execution only inside Docker, never on the host.
+- `DockerSandbox`: non-root, no network by default, CPU/memory/PID/time limits, read-only root, dropped capabilities, no-new-privileges, no Docker socket, per-agent bind mount.
+- `web_search` / `fetch_webpage` with mock and configurable HTTP providers plus SSRF blocking, redirect limits, response caps, and untrusted-content marking.
+- Local `git_status/diff/log/add/commit/push` with parameterized commands, repository scoping, credential scrubbing, and a mandatory approval gate for push.
+- Controlled cross-agent artifact transfer; direct workspace reads are impossible.
+- Tool calls are persisted in SQLite and shown by the CLI (`tools`, `tool-calls`).
 
 ---
 
@@ -24,10 +34,11 @@ AgentForge is a Python multi-agent runtime built for the HKUST NLP/Agent course 
 ### 1. Prerequisites
 
 - Python **3.11+** (verified with Python 3.12.10)
-- Git (optional for running, required for version control)
+- Git (for version control and local Git-tool tests)
+- Docker Desktop + WSL2 **only** for `python_execute`/`python_test` and `agentforge demo-tools`
 - PowerShell or Git Bash
 
-No API key is required for the offline demo and tests.
+No API key is required for the deterministic demo and most tests. Docker is absent on the current development machine; the Docker parts report a prerequisite failure instead of silently executing on the host.
 
 ### 2. Install
 
@@ -41,7 +52,7 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-If PowerShell blocks activation, allow it for the current shell only:
+If activation is blocked:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -58,56 +69,74 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-### 3. Run the offline demo
+### 3. Run the Phase 1 demo (no Docker/API key)
 
 ```powershell
 python -m agentforge demo
 ```
 
-The demo runs the required Phase 1 scenario end to end:
+This runs the required multi-agent research/implementation/review scenario through the real MessageBus, task DAG, persistence, and metrics. LLM content is deterministic mock fixture data; routing, task transitions, delegation, storage and metrics are real.
 
-> "Research the benefits of multi-agent systems, propose a Python implementation
-> plan, and review the plan for potential issues."
+### 4. Run the Phase 2 file-tool demo (no Docker)
 
-It prints the execution plan, per-task assignments/status/durations, the independent
-review, the final report, metrics, and persistence locations. All content comes from
-deterministic mock fixtures; message routing, task transitions, delegation, storage,
-and metrics are real.
+```powershell
+python examples/tool_file_demo.py
+```
 
-### 4. Run the tests
+This invokes the real Runtime and ToolExecutor: CodingAgent writes `notes/demo.md` and reads it back. The tool calls, file contents, durations, audit rows and metrics are real; only LLM decisions are mock fixtures.
+
+### 5. Run the Phase 2 Docker demo (requires Docker)
+
+```powershell
+docker info
+python -m agentforge demo-tools
+```
+
+Goal:
+
+> Create a Python script that calculates prime numbers, execute it, verify the output, and produce a Markdown report summarizing the implementation and test results.
+
+The CodingAgent calls `python_syntax_check` and `python_execute`; the script runs inside the non-root, network-disabled Docker sandbox. stdout, stderr, exit code, script path and tool audit are shown. **If Docker is unavailable, `demo-tools` exits with code 2 and prints the prerequisite; there is no host fallback.**
+
+### 6. Run the tests
 
 ```powershell
 pytest -q
+pytest -m docker -q        # only with Docker running
 ```
 
-Expected: `82 passed`. Optional coverage report:
+Expected on the current machine:
+
+```text
+175 passed, 5 skipped
+```
+
+Optional coverage:
 
 ```powershell
 pytest --cov=agentforge --cov-report=term -q
+# TOTAL: 4637 statements, 1100 missed, 76% coverage
 ```
 
 ---
 
 ## Configuration
 
-Copy `.env.example` to `.env` and edit it. Never commit `.env`.
+Copy `.env.example` to `.env`; never commit `.env`.
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-### Provider selection
+### LLM providers
 
-| Provider | Value | Network | Purpose |
+| Provider | Value | Network | Use |
 |---|---|---|---|
-| Mock | `mock` | No | Deterministic tests and offline demo |
+| Mock | `mock` | No | Tests and deterministic demos |
 | DeepSeek | `deepseek` | Yes | Real LLM planning/execution |
-| HKGAI | `hkgai` | Yes | Real LLM via the course HKGAI endpoint |
+| HKGAI | `hkgai` | Yes | Course HKGAI endpoint |
 
-Only DeepSeek and HKGAI are supported as real providers. OpenAI/Anthropic APIs are
-not used anywhere in the runtime.
-
-### DeepSeek
+Only DeepSeek and HKGAI are used as real providers. No OpenAI/Anthropic SDK or endpoint is used.
 
 ```dotenv
 AGENTFORGE_LLM_PROVIDER=deepseek
@@ -116,152 +145,135 @@ AGENTFORGE_DEEPSEEK_BASE_URL=https://api.deepseek.com
 AGENTFORGE_DEEPSEEK_MODEL=deepseek-chat
 ```
 
-`DEEPSEEK_API_KEY` is also accepted as a conventional alias. Then run:
+`DEEPSEEK_API_KEY` is accepted as an alias. Selecting a real provider without credentials fails explicitly; it never silently falls back to mock.
 
-```powershell
-python -m agentforge run "Research multi-agent systems and propose a Python implementation plan."
-```
+HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the course; live HKGAI validation is pending.
 
-There is **no silent fallback**: selecting `deepseek` without a key fails with a
-clear configuration error rather than quietly using mock data.
-
-### HKGAI
-
-```dotenv
-AGENTFORGE_LLM_PROVIDER=hkgai
-AGENTFORGE_HKGAI_API_KEY=...
-AGENTFORGE_HKGAI_BASE_URL=https://<course-endpoint>
-AGENTFORGE_HKGAI_MODEL=<course-model>
-```
-
-The base URL and model must be confirmed with the course provider; no endpoint is
-invented in the code. Real HKGAI verification is **Pending**.
-
-### Other useful settings
+### Tools and sandbox
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AGENTFORGE_TEMPERATURE` | `0.2` | Sampling temperature |
-| `AGENTFORGE_MAX_TOKENS` | `2048` | Max completion tokens |
-| `AGENTFORGE_REQUEST_TIMEOUT` | `60` | HTTP timeout (seconds) |
-| `AGENTFORGE_MAX_RETRIES` | `3` | Retries for retryable HTTP failures |
-| `AGENTFORGE_MAX_PLAN_SUBTASKS` | `8` | Maximum planned subtasks |
-| `AGENTFORGE_MAX_DELEGATION_DEPTH` | `3` | Maximum task-tree depth |
-| `AGENTFORGE_MAX_DELEGATION_ROUNDS` | `2` | Delegation rounds per task |
-| `AGENTFORGE_MAX_EXECUTION_STEPS` | `30` | LLM task executions per workflow |
-| `AGENTFORGE_MAX_TASKS_PER_WORKFLOW` | `60` | Hard task-count cap |
-| `AGENTFORGE_ENABLE_FINAL_REVIEW` | `true` | Add the review governance task |
-| `AGENTFORGE_DATA_DIR` | `data` | SQLite/JSONL output directory |
-| `AGENTFORGE_LOG_LEVEL` | `INFO` | Console/file log level |
+| `AGENTFORGE_TOOLS_ENABLED` | `true` | Register tools and enable the agent tool loop |
+| `AGENTFORGE_MAX_TOOL_CALLS_PER_TASK` | `6` | Hard tool-call budget |
+| `AGENTFORGE_TOOL_OUTPUT_LIMIT_BYTES` | `65536` | Dispatcher output cap |
+| `AGENTFORGE_MAX_FILE_BYTES` | `262144` | Per-file read/write/artifact cap |
+| `AGENTFORGE_MAX_WORKSPACE_FILES` | `200` | List/search result cap |
+| `AGENTFORGE_WORKSPACE_ROOT` | `<data>/workspaces` | Private workspace root |
+| `AGENTFORGE_ARTIFACTS_ROOT` | `<data>/artifacts` | Controlled artifact store |
+| `AGENTFORGE_SANDBOX_IMAGE` | `python:3.11-slim` | Sandbox image |
+| `AGENTFORGE_SANDBOX_CPU_LIMIT` | `1.0` | CPU quota |
+| `AGENTFORGE_SANDBOX_MEMORY_MB` | `256` | Memory quota |
+| `AGENTFORGE_SANDBOX_PIDS_LIMIT` | `64` | PID quota |
+| `AGENTFORGE_SANDBOX_TIMEOUT_SECONDS` | `30` | Per-execution timeout |
+| `AGENTFORGE_SANDBOX_NETWORK_ENABLED` | `false` | Container network (default off) |
+| `AGENTFORGE_SANDBOX_CONTAINER_USER` | `65534:65534` | Non-root user (root is rejected) |
+| `AGENTFORGE_SANDBOX_READ_ONLY_ROOT` | `true` | Read-only container root |
+| `AGENTFORGE_SANDBOX_TMPFS_SIZE_MB` | `64` | `/tmp` tmpfs size |
 
-Global CLI flags `--data-dir`, `--provider`, and `--log-level` override configuration
-for one command.
+### Search
+
+`AGENTFORGE_SEARCH_PROVIDER=mock` is the default and makes no network requests. `http` requires a configurable JSON endpoint:
+
+```dotenv
+AGENTFORGE_SEARCH_PROVIDER=http
+AGENTFORGE_SEARCH_ENDPOINT=https://your-search-service.example/v1/search
+AGENTFORGE_SEARCH_API_KEY=...
+AGENTFORGE_SEARCH_TIMEOUT=15
+AGENTFORGE_WEB_FETCH_MAX_BYTES=262144
+AGENTFORGE_WEB_FETCH_MAX_REDIRECTS=3
+```
+
+Expected search response: `{"results": [{"title", "url", "snippet", "source"}]}`. Page fetching blocks localhost, private/special-use IPs, cloud metadata hostnames, credentials in URLs, non-80/443 ports, oversized responses and excessive redirects. Live search is **not verified** in this environment.
+
+### Local Git tools
+
+```dotenv
+AGENTFORGE_GIT_REPO_ROOT=D:/path/to/authorized/repo
+AGENTFORGE_GIT_TIMEOUT=30
+```
+
+Git tools are disabled when no authorized root is configured. Commands use argument lists (no shell), explicit file scopes for add/commit, and a credential-scrubbed environment. `git_push` always requires approval; the default gate returns `PENDING_APPROVAL` and performs no push. No real remote is pushed by tests; the push test uses a temporary local bare repository.
 
 ---
 
 ## CLI reference
 
 ```text
-agentforge demo                        Deterministic offline end-to-end demo
-agentforge run "<goal>"                Run a workflow with the configured provider
-agentforge chat <agent_id>             Interactive private chat with one agent
-agentforge chat <agent_id> -m "..."    One-shot private message
-agentforge repl                        Interactive shell (/goal, /dm, /tasks, ...)
-agentforge agents                      List agents and capabilities
-agentforge tasks [--workflow ID]       Task status and durations
-agentforge conversations               List direct/group conversations
-agentforge messages                    List conversations
-agentforge messages --all              Latest messages from all conversations
-agentforge messages --conversation ID  Replay one transcript
+agentforge demo                        Phase 1 deterministic demo
+agentforge demo-tools                  Phase 2 Docker/Python end-to-end demo
+agentforge run "<goal>"                Workflow with the configured provider
+agentforge chat <agent_id>             Private chat
+agentforge repl                        Interactive shell
+agentforge agents                      Agent list and capabilities
+agentforge tools                       Tool contracts, permissions, timeouts
+agentforge tool-calls                  Tool audit records
+agentforge tasks [--workflow ID]       Task status
+agentforge conversations               Conversation list
+agentforge messages [--all]            Messages / transcript replay
 agentforge history                     Workflow history
-agentforge result <workflow_id>        Print the final report
-agentforge metrics [workflow_id]       Completion rate, timing, tokens, depth
+agentforge result <workflow_id>        Final report
+agentforge metrics [workflow_id]       Completion, timing, tokens, tools
 ```
 
 Agent IDs: `coordinator`, `research`, `coding`, `reviewer`.
 
-REPL commands: `/agents`, `/dm <agent_id> <message>`, `/goal <text>`,
-`/tasks [workflow_id]`, `/messages [conversation_id]`, `/conversations`,
-`/history`, `/result <workflow_id>`, `/metrics [workflow_id]`, `/help`, `/quit`.
+REPL: `/agents`, `/tools`, `/tool-calls [workflow_id]`, `/dm`, `/goal`, `/tasks`,
+`/messages`, `/conversations`, `/history`, `/result`, `/metrics`, `/quit`.
 
-Use `python -m agentforge ...` if the `agentforge` console script is not on `PATH`.
-
-### Isolated runs
-
-Every command accepts a global data directory:
-
-```powershell
-python -m agentforge --data-dir data/run1 demo
-python -m agentforge --data-dir data/run1 history
-```
-
-This is useful for keeping demos, experiments, and tests separate.
+Global flags `--data-dir`, `--provider`, `--log-level` apply to every command.
 
 ---
 
-## What Phase 1 actually implements
+## Tool system at a glance
 
-### Agent runtime
+Agents cannot execute tools directly. The LLM emits a structured action:
 
-- `BaseAgent` with unique ID, name, role, capabilities, provider, inbox, task state,
-  memory interface, and tool interface.
-- Four roles: Coordinator, Research, Coding, Reviewer.
-- Agents return a structured JSON action: `complete`, `delegate`, or `fail`.
-  Delegation is executed and bounded by the orchestrator, never trusted blindly.
-- Private human→agent chat with persisted replies.
+```json
+{"action": "tool_call", "tool_calls": [
+  {"name": "write_file", "arguments": {"path": "notes.md", "content": "# Notes"}}
+]}
+```
 
-### Dynamic orchestration
+The `ToolExecutor` then:
 
-1. The Coordinator asks the configured LLM for a structured plan using the **live
-   agent/capability catalogue**.
-2. The plan is validated: unique keys, known dependencies, acyclic graph, size limit.
-3. A capability matcher requires **full coverage** of each task's capabilities.
-4. Ready tasks execute in dependency order; requests/results travel through the
-   message bus.
-5. Agents may delegate subtasks; the parent task is `BLOCKED` and resumes after its
-   children finish. Depth, rounds, total tasks, and execution steps are enforced.
-6. The platform adds governance tasks: synthesis → independent review → finalisation.
-7. The human receives the final report; every step is persisted.
+1. resolves the tool and checks the per-agent permission policy (default deny),
+2. validates arguments against the tool's JSON Schema,
+3. requests human approval for destructive permissions such as file deletion and git push,
+4. executes with a hard timeout and output cap,
+5. validates structured output,
+6. records the call in SQLite (`tool_calls`) and JSONL,
+7. returns stdout/structured output/error to the agent, which continues reasoning.
 
-The plan is **not** a hard-coded three-step script. In real-API mode, the structure
-and content come from the LLM. The synthesis/review/finalisation phases are explicit
-platform policy and are configurable.
+Built-in tools:
 
-### Messaging
-
-- Human → Agent direct chat
-- Human → Group goal publication
-- Agent → Agent task request/result
-- Agent → Group delegation and final report
-- Every message has ID, sender, receiver/conversation, timestamp, type, content,
-  correlation ID, and optional task ID; transcripts replay in order.
-
-### Persistence and observability
-
-SQLite tables: `conversations`, `messages`, `tasks`, `agent_executions`, `workflows`,
-`memory_entries`. Append-only JSONL events capture lifecycle changes for live
-debugging. Metrics: task completion rate, completed/failed/blocked counts, summed
-task time, workflow duration, LLM calls, prompt/completion tokens, delegation count,
-and maximum depth.
-
-Memory is namespaced per agent (`agent_id`) and by kind (`experience`,
-`conversation`). Phase 1 records episodic outcomes and retrieves by token overlap +
-recency. Reflection, importance decay, forgetting, and semantic retrieval are Phase 2.
-
-### Explicitly not implemented in Phase 1
-
-| Capability | Status |
+| Tool | Purpose |
 |---|---|
-| Memory evolution / reflection / semantic retrieval | TODO — Phase 2 |
-| Docker sandbox / private per-agent filesystem | TODO — Phase 3 |
-| Web search / Python execution / file tools | TODO — Phase 3 |
-| GitHub commit/push automation | TODO — Phase 5 |
-| Human-in-the-loop approval, pause/resume, permissions | TODO — Phase 4 |
-| Web frontend | Not planned; CLI only |
-| Real DeepSeek/HKGAI acceptance run | Pending: no API key available |
+| `list_files`, `read_file`, `write_file`, `update_file`, `delete_file`, `search_files` | Private Markdown/TXT workspace; delete requires approval |
+| `share_artifact`, `fetch_artifact` | Controlled cross-agent file transfer |
+| `python_syntax_check` | Static parse only (no execution) |
+| `python_execute`, `python_test` | Python inside the Docker sandbox only |
+| `web_search`, `fetch_webpage` | Search provider + SSRF-guarded fetch |
+| `git_status`, `git_diff`, `git_log`, `git_add`, `git_commit`, `git_push` | Authorized local repository; push requires approval |
 
-Interfaces for tools, sandboxes, memory, and human interaction are present so later
-phases extend rather than rewrite the runtime.
+See [docs/TOOL_SYSTEM.md](docs/TOOL_SYSTEM.md) for contracts, the permission matrix and the agent loop.
+
+---
+
+## Sandbox security at a glance
+
+Each agent has its own workspace and Docker container:
+
+- container user `65534:65534`; root is rejected by configuration;
+- `--network none` by default;
+- `--cpus`, `--memory`/`--memory-swap`, `--pids-limit`, wall-clock timeout;
+- `--read-only` root with a noexec `/tmp` tmpfs;
+- `--cap-drop ALL` and `no-new-privileges`;
+- only the agent's private workspace is bind-mounted at `/workspace`;
+- no Docker socket, no privileged mode, no host environment/API keys;
+- stale container cleanup and container kill on timeout;
+- Python files are staged into the private workspace; no host execution fallback.
+
+See [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md) for the threat model, flags, verification commands and residual risks.
 
 ---
 
@@ -270,23 +282,23 @@ phases extend rather than rewrite the runtime.
 ```text
 .
 ├── src/agentforge/
-│   ├── agents/          BaseAgent, four roles, registry, profiles
-│   ├── orchestration/   planner validation, assignment, state machine, engine
-│   ├── messaging/       conversation manager and message bus
-│   ├── llm/             provider interface, DeepSeek, HKGAI, mock, factory
-│   ├── memory/          memory interface, in-memory and SQLite stores
-│   ├── tools/           tool contract and registry (Phase 3 tools pending)
-│   ├── sandbox/         sandbox contract and explicit Docker TODO
-│   ├── evaluation/      workflow metrics
-│   ├── models/          Pydantic domain models
+│   ├── agents/          BaseAgent tool loop, four roles, registry
+│   ├── orchestration/   planning, DAG execution, delegation, metrics
+│   ├── messaging/       conversations and message bus
+│   ├── llm/             provider interface, DeepSeek, HKGAI, mock
+│   ├── tools/           dispatcher, policy, approvals, file/artifact/Python/search/Git tools
+│   ├── sandbox/         Docker sandbox, command runner, manager
+│   ├── memory/          per-agent memory interfaces
+│   ├── models/          Pydantic contracts (messages, tasks, tools, workflows)
+│   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, ...)
+│   ├── evaluation/      workflow metrics including tool usage
 │   ├── config/          centralized environment settings
-│   ├── persistence/     SQLite repository and JSONL event logger
-│   ├── runtime.py       dependency wiring and public runtime API
-│   └── cli.py           CLI and interactive REPL
-├── tests/               82 pytest tests (unit + integration + CLI subprocess)
-├── examples/            programmatic mock and real-provider examples
-├── docs/                architecture, plan, Phase 1 report
-├── data/                runtime SQLite/JSONL output (ignored by Git)
+│   ├── runtime.py       dependency wiring and public API
+│   └── cli.py           CLI and REPL
+├── tests/               180 collected: unit, integration, protocol, CLI, Docker-gated
+├── examples/            mock demo, file-tool demo, real-provider example
+├── docs/                architecture, plan, Phase 1/2 reports, tool & sandbox security
+├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
 ├── .env.example
 ├── pyproject.toml
 └── README.md
@@ -294,48 +306,59 @@ phases extend rather than rewrite the runtime.
 
 ---
 
-## Verification
+## Persistence and observability
 
-Actual results from this workspace (2026-11-07, Windows, Python 3.12.10):
+SQLite tables: `conversations`, `messages`, `tasks`, `agent_executions`, `workflows`, `memory_entries`, `tool_calls`, `artifacts`.
 
-```text
-$ pytest -q
-82 passed in 7.91s
+Each tool call records: agent, workflow, task, tool name, arguments, status, output, error, duration, permission decision, approval status/id, permissions, timestamps and metadata. JSONL events mirror lifecycle and tool activity.
 
-$ pytest --cov=agentforge --cov-report=term -q
-82 passed in 9.41s
-TOTAL 2579 statements, 747 missed, 71% coverage
-```
-
-The CLI is tested through real subprocesses (`test_cli.py`), so its lines are not
-included in the in-process coverage number. Core modules such as the state machine,
-planner, assignment, mock provider, metrics, and event logger are at or near 100%.
-
-Provider protocol tests use `httpx.MockTransport`; no test makes a network call.
+Metrics now include tool calls, tool failures and summed tool time alongside completion rate, workflow/task duration, LLM calls, tokens, delegation count and depth.
 
 ---
 
-## Design notes
+## What is implemented vs. not
 
-- **No OpenAI/Anthropic dependency.** The provider layer targets DeepSeek and HKGAI
-  only; the OpenAI-compatible wire protocol is just a protocol.
-- **Mock is clearly labelled.** `demo` and mock runs print a notice; mock fixtures are
-  excluded from formal model quality claims.
-- **Capability matching is strict.** A task must be fully covered by one agent.
-  Otherwise the workflow fails with a precise error; the planner is instructed to
-  split work instead of mis-assigning it.
-- **Failure is honest.** Provider errors, malformed actions, dependency failures, and
-  budget exhaustion produce failed tasks with reasons and audit records. Nothing is
-  silently marked complete.
-- **Custom orchestration engine.** Phase 1 uses an explicit executor instead of a
-  fixed LangGraph diagram, because the task graph must be LLM-generated and validated
-  at runtime. A LangGraph adapter can be added later without changing agent or
-  messaging contracts.
-- **Secrets.** API keys are read from environment variables / `.env` and are never
-  logged or persisted.
+Implemented:
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component details and
-[docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md) for the verification report.
+- Human↔Agent private chat, Human→Group goals, Agent→Agent, Agent→Group.
+- LLM-generated task DAG, capability assignment, bounded delegation.
+- Tool calls through a unified dispatcher with real results and iterative reasoning.
+- Private file tools, artifacts, Docker sandbox, Python execution (Docker-gated), search providers, local Git tools.
+- Approval gates for file deletion and git push (default: pending).
+- SQLite + JSONL observability, CLI, deterministic demos, 175 passing tests.
+
+Not implemented / pending:
+
+- **Docker integration on this machine** — Docker CLI missing; tests skipped; `demo-tools` reports the prerequisite.
+- **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
+- **Real remote Git push** — only a temporary local bare remote was tested; default approval gate prevents pushes.
+- **Real LLM tool-calling** — no DeepSeek/HKGAI key; mock decisions are deterministic fixtures.
+- **Memory evolution** — reflection, decay, consolidation, semantic retrieval are Phase 3.
+- **Full HITL** — interactive approval/pause/resume is Phase 4; Phase 2 only has a gate interface.
+- **Web UI**, parallel tool execution, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
+
+---
+
+## Docker verification commands
+
+On a machine with Docker Desktop + WSL2:
+
+```powershell
+docker info
+python -m pytest -m docker -q
+python -m agentforge demo-tools
+```
+
+Expected Docker tests: sandbox start/stop, non-root UID, network blocked, per-agent workspace isolation, configured CPU/memory/PID limits, and real prime-script execution.
+
+The current machine output:
+
+```text
+docker: command not found
+Docker CLI not found on PATH. Install Docker Desktop with WSL2...
+```
+
+This is recorded honestly in [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md); no Docker test was marked passed without Docker.
 
 ---
 
@@ -343,14 +366,26 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for component details and
 
 | Symptom | Fix |
 |---|---|
-| `No database found ...` | Run `python -m agentforge demo` first, or pass the same `--data-dir`. |
-| `no API key is configured` | Set the key in `.env`, or use `AGENTFORGE_LLM_PROVIDER=mock`. |
-| PowerShell blocks venv activation | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. |
-| Console garbles box characters | Set `$env:PYTHONIOENCODING="utf-8"` or use Windows Terminal. |
-| Want a clean run | Delete `data/agentforge.db*` and `data/events.jsonl`, or use a new `--data-dir`. |
-| DeepSeek HTTP 401/429 | Check key/quota; retries apply to 408/429/5xx, not to invalid credentials. |
+| `Docker prerequisite missing` | Install/start Docker Desktop with WSL2; verify `docker info`. |
+| `Docker sandbox unavailable` in a tool result | Same; Python tools never fall back to host execution. |
+| `tool permission denied` | The agent role lacks the tool permission; see `agentforge tools`. |
+| `pending_approval` / `git_push` blocked | Phase 2 has no interactive approval channel; push requires an approved gate. |
+| `No database found` | Run a demo first or pass the same `--data-dir`. |
+| `no API key is configured` | Fill `.env` or use `AGENTFORGE_LLM_PROVIDER=mock`. |
+| PowerShell blocks activation | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. |
+| Legacy console garbles output | `$env:PYTHONIOENCODING="utf-8"`; use Windows Terminal. |
+| Clean run | Delete `data/` contents except `.gitkeep`, or use a new `--data-dir`. |
 
 ---
+
+## Documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/TOOL_SYSTEM.md](docs/TOOL_SYSTEM.md)
+- [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md)
+- [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md)
+- [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md)
+- [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)
 
 ## License
 
