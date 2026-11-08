@@ -30,6 +30,10 @@ PHASE2_GOAL = (
 class ToolFileProvider(MockProvider):
     """Plans one coding task and performs real file tool calls."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.prompts: list[tuple[str, str]] = []
+
     def _resp(self, content: str) -> LLMResponse:
         return LLMResponse(
             content=content,
@@ -41,6 +45,7 @@ class ToolFileProvider(MockProvider):
 
     async def complete(self, messages, *, purpose=None, temperature=None, max_tokens=None):
         prompt = "\n\n".join(message.content for message in messages)
+        self.prompts.append((purpose or "", prompt))
         if purpose == "plan":
             payload = {
                 "goal_summary": "real file tool demo",
@@ -299,7 +304,8 @@ class HostEscapeProvider(MockProvider):
 
 
 async def test_agent_file_tool_workflow(make_runtime):
-    runtime = make_runtime(provider=ToolFileProvider())
+    provider = ToolFileProvider()
+    runtime = make_runtime(provider=provider)
     workflow = await runtime.submit_goal("Create and verify a note")
 
     assert workflow.status is WorkflowStatus.COMPLETED, workflow.error
@@ -311,6 +317,8 @@ async def test_agent_file_tool_workflow(make_runtime):
     coding = next(task for task in tasks if task.metadata.get("kind") == "coding")
     assert coding.status is TaskStatus.COMPLETED
     assert "verified its content" in (coding.result or "")
+    assert coding.metadata["tool_call_count"] == 2
+    assert len(coding.metadata["tool_call_ids"]) == 2
 
     workspace = runtime.workspaces.workspace_for("coding")
     note = workspace / "notes.md"
@@ -321,6 +329,27 @@ async def test_agent_file_tool_workflow(make_runtime):
     assert [record.tool_name for record in records] == ["write_file", "read_file"]
     assert all(record.status is ToolResultStatus.SUCCESS for record in records)
     assert all(record.workflow_id == workflow.workflow_id for record in records)
+
+    # The synthesis/review/finalize prompts receive structured evidence from the
+    # persisted tool audit of the upstream coding task, not just its prose result.
+    for purpose in (
+        "execute:synthesis:coordinator",
+        "execute:review:reviewer",
+        "execute:finalize:coordinator",
+    ):
+        prompts = [text for name, text in provider.prompts if name == purpose]
+        assert prompts, f"missing prompt for {purpose}"
+        assert "[TOOL_EVIDENCE]" in prompts[-1]
+        assert "write_file" in prompts[-1]
+        assert "read_file" in prompts[-1]
+        assert "real content" in prompts[-1]
+
+    assert "## Tool execution evidence (persisted audit)" in (
+        workflow.final_result or ""
+    )
+    assert "write_file" in (workflow.final_result or "")
+    assert "read_file" in (workflow.final_result or "")
+    assert "real content" in (workflow.final_result or "")
 
     metrics = workflow.metrics
     assert metrics.tool_calls == 2
@@ -425,7 +454,8 @@ async def test_no_host_fallback_when_docker_missing(make_runtime, tmp_path):
 @pytest.mark.docker
 @requires_docker
 async def test_phase2_primes_end_to_end(make_runtime):
-    runtime = make_runtime(provider=MockProvider(), mock_latency_ms=0)
+    provider = MockProvider()
+    runtime = make_runtime(provider=provider, mock_latency_ms=0)
     workflow = await runtime.submit_goal(PHASE2_GOAL)
 
     assert workflow.status is WorkflowStatus.COMPLETED, workflow.error
@@ -436,10 +466,36 @@ async def test_phase2_primes_end_to_end(make_runtime):
     ]
     assert all(record.status is ToolResultStatus.SUCCESS for record in records)
     execute = records[-1]
+    expected_stdout = "Primes up to 20: [2, 3, 5, 7, 11, 13, 17, 19]"
     assert execute.output["exit_code"] == 0
-    assert "Primes up to 20: [2, 3, 5, 7, 11, 13, 17, 19]" in execute.output["stdout"]
+    assert expected_stdout in execute.output["stdout"]
+    assert execute.output["stderr"] == ""
+    assert execute.output["duration_seconds"] >= 0
+    assert execute.metadata["container"].startswith("agentforge-sandbox-coding-")
+
     script = runtime.workspaces.workspace_for("coding") / "scripts" / "primes.py"
     assert script.exists()
     assert "def primes" in script.read_text(encoding="utf-8")
+
+    tasks = runtime.list_tasks(workflow.workflow_id)
+    coding = next(task for task in tasks if task.metadata.get("kind") == "coding")
+    synthesis = next(
+        task for task in tasks if task.metadata.get("kind") == "synthesis"
+    )
+    review = next(task for task in tasks if task.metadata.get("kind") == "review")
+    assert len(coding.metadata["tool_call_ids"]) == 2
+    assert expected_stdout in (synthesis.result or "")
+    assert expected_stdout in (review.result or "")
+    assert "Exit code: `0`" in (review.result or "")
+    assert "requires a working Docker daemon" not in (review.result or "")
+    assert "Docker sandbox" in (review.result or "")
+
     assert workflow.final_result is not None
-    assert "Prime" in workflow.final_result or "prime" in workflow.final_result
+    assert expected_stdout in workflow.final_result
+    assert "Exit code: `0`" in workflow.final_result
+    assert "Tool calls recorded: 2" in workflow.final_result
+    assert "agentforge-sandbox-coding-" in workflow.final_result
+    assert "stderr:\n```text\n(empty)" in workflow.final_result
+    assert "APPROVED_WITH_ISSUES" in workflow.final_result
+    assert "(not available)" not in workflow.final_result
+    assert "Exit code: unknown" not in workflow.final_result

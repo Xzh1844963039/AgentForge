@@ -203,74 +203,6 @@ if __name__ == "__main__":
     print("Primes up to 20:", primes(20))
 '''
 
-_PRIME_SYNTHESIS = """# Draft: Prime-Number Script and Execution
-
-## Implementation
-
-The CodingAgent used the sandboxed `python_syntax_check` and `python_execute` tools. The script defines a `primes(limit)` function that tests every candidate with trial division up to its integer square root and prints the primes up to 20.
-
-## Verification evidence
-
-The agent reported the real tool results: the generated script path, syntax-check status, process exit code, stdout and stderr. The Reviewer should confirm that the printed sequence is exactly `[2, 3, 5, 7, 11, 13, 17, 19]` and that no host-side execution occurred.
-
-## Gaps
-
-The workflow depends on Docker availability. If the sandbox is unavailable, the execution tool must fail explicitly instead of running code on the host."""
-
-_PRIME_REVIEW = """Verdict: APPROVED_WITH_ISSUES
-
-## Summary
-
-The implementation and its execution evidence are technically sound. The prime list is correct for the stated limit, and the script is short enough to inspect manually. The main residual risk is environmental: execution requires a working Docker daemon and the isolation limits must be verified on the target machine.
-
-## Issues
-
-1. **Docker prerequisite.** The end-to-end result is only valid when the Docker sandbox actually started; a host fallback would invalidate the isolation claim.
-2. **Input bounds.** The script has no guard for negative or very large limits; a production version should validate input.
-3. **Test coverage.** The demo verifies one invocation but does not include a unittest suite or edge cases.
-
-## Suggestions
-
-- Keep execution inside the non-root, network-disabled container.
-- Add bounds checks and a unittest for `primes`.
-- Preserve stdout, stderr and exit code in the final report and tool audit.
-
-## Decision
-
-Approved for the Phase 2 demonstration, with the above issues noted."""
-
-_PRIME_FINAL_TEMPLATE = """# Phase 2 Tool Demo Report: Prime-Number Script
-
-## 1. Objective
-
-Create a Python script that calculates prime numbers, execute it in an isolated sandbox, verify the output, and summarize the implementation and test results.
-
-## 2. Implementation
-
-The CodingAgent generated `primes.py` and used the tool dispatcher:
-
-1. `python_syntax_check` validated the source without executing it.
-2. `python_execute` wrote the script into the agent's private workspace and ran it inside the Docker sandbox.
-3. The returned exit code and stdout were fed back into the agent's reasoning loop.
-
-## 3. Execution evidence
-
-The sandbox returned:
-
-```text
-{stdout}
-```
-
-Exit code: `{exit_code}`. The tool audit records the script path, duration, permissions and sandbox metadata.
-
-## 4. Review
-
-The Reviewer approved the result with issues. The prime sequence is correct, but input bounds and a unittest suite should be added. Docker availability is a hard prerequisite; the implementation never falls back to host execution.
-
-## 5. Limitations
-
-This demonstration validates tool dispatch, private file operations, sandbox execution and result propagation. It does not validate internet search or GitHub operations; those have separate tests and provider configurations."""
-
 _FINAL = """# Final Report: Multi-Agent Systems and a Reviewed Python Implementation Plan
 
 ## Executive summary
@@ -450,14 +382,19 @@ class MockProvider(BaseLLMProvider):
 
     def _execute_content(self, kind: str, role: str, prompt: str) -> str:
         is_prime = "prime" in prompt.lower()
+        evidence = _extract_tool_evidence(prompt)
+        evidence_applied = False
         if kind == "coding" and is_prime:
             return self._prime_coding_response(prompt)
         if kind == "synthesis" and is_prime:
-            content = _PRIME_SYNTHESIS
+            content = self._prime_synthesis_content(evidence)
+            evidence_applied = True
         elif kind == "review" and is_prime:
-            content = _PRIME_REVIEW
+            content = self._prime_review_content(evidence)
+            evidence_applied = True
         elif kind == "finalize" and is_prime:
-            content = self._prime_final_content(prompt)
+            content = self._prime_final_content(evidence)
+            evidence_applied = True
         else:
             content = {
                 "research": _RESEARCH,
@@ -477,6 +414,13 @@ class MockProvider(BaseLLMProvider):
                 }.get(role, _generic_completion(role, prompt))
             else:
                 content = _generic_completion(role, prompt)
+
+        if evidence and not evidence_applied and kind in {
+            "synthesis",
+            "review",
+            "finalize",
+        }:
+            content = _apply_evidence_to_content(content, evidence, kind)
 
         return json.dumps(
             {
@@ -564,12 +508,165 @@ class MockProvider(BaseLLMProvider):
             }
         )
 
-    def _prime_final_content(self, prompt: str) -> str:
-        stdout_match = re.search(r"Primes up to 20:\s*\[[^\]]*\]", prompt)
-        exit_match = re.search(r"Exit code:\s*`?(\d+)`?", prompt)
-        return _PRIME_FINAL_TEMPLATE.format(
-            stdout=stdout_match.group(0) if stdout_match else "(not available)",
-            exit_code=exit_match.group(1) if exit_match else "unknown",
+    def _prime_synthesis_content(self, evidence: list[dict]) -> str:
+        execution = _execution_evidence(evidence)
+        if execution is None:
+            return (
+                "# Draft: Prime-Number Script and Execution\n\n"
+                "## Verification evidence\n\n"
+                "No persisted `python_execute` evidence was supplied to the "
+                "synthesizer. This draft does not claim execution success and does "
+                "not invent stdout, stderr or an exit code.\n\n"
+                "## Gaps\n\n"
+                "The workflow must be re-run with a working Docker sandbox.\n"
+            )
+        output = execution.get("output") or {}
+        stdout = _text(output.get("stdout")) or "(empty)"
+        stderr = _text(output.get("stderr")) or "(empty)"
+        return (
+            "# Draft: Prime-Number Script and Execution\n\n"
+            "## Verification evidence\n\n"
+            "The following values are copied from the persisted SQLite `tool_calls` "
+            "audit, not from model prose.\n\n"
+            f"- Tool calls recorded: {len(evidence)}\n"
+            f"- `python_execute` status: `{execution.get('status', 'unknown')}`\n"
+            f"- Exit code: `{_exit_code(execution)}`\n"
+            f"- Script path: `{_text(output.get('script_path')) or '(not reported)'}`\n"
+            f"- Sandbox container: `{_container(execution)}`\n"
+            f"- Tool duration: {_duration(execution)}\n\n"
+            f"stdout:\n```text\n{stdout}\n```\n\n"
+            f"stderr:\n```text\n{stderr}\n```\n\n"
+            "## Tool audit\n\n"
+            f"{_evidence_bullets(evidence)}\n\n"
+            "## Gaps\n\n"
+            "Input bounds and a unittest suite are still missing. Execution success "
+            "must be judged from the recorded exit code and stdout above.\n"
+        )
+
+    def _prime_review_content(self, evidence: list[dict]) -> str:
+        execution = _execution_evidence(evidence)
+        if execution is None:
+            return (
+                "Verdict: REJECTED\n\n"
+                "## Summary\n\n"
+                "No persisted `python_execute` evidence was supplied to the "
+                "Reviewer. Execution success cannot be verified from tool prose "
+                "alone.\n\n"
+                "## Issues\n\n"
+                "1. **Missing execution evidence.** No recorded stdout, stderr, exit "
+                "code, duration or sandbox metadata is available.\n"
+                "2. **No success claim permitted.** The workflow must be re-run with "
+                "a working Docker sandbox.\n\n"
+                "## Decision\n\n"
+                "Rejected pending real execution evidence.\n"
+            )
+        output = execution.get("output") or {}
+        stdout = _text(output.get("stdout")) or "(empty)"
+        stderr = _text(output.get("stderr")) or "(empty)"
+        exit_code = _exit_code(execution)
+        if not _evidence_is_success(execution):
+            error = _text(execution.get("error")) or "the tool call did not succeed"
+            return (
+                "Verdict: REJECTED\n\n"
+                "## Summary\n\n"
+                "The persisted tool audit shows that `python_execute` did not "
+                "complete successfully, so the result cannot be approved.\n\n"
+                "## Evidence\n\n"
+                f"- Status: `{execution.get('status', 'unknown')}`\n"
+                f"- Exit code: `{exit_code}`\n"
+                f"- Error: {error}\n"
+                f"- stderr:\n```text\n{stderr}\n```\n\n"
+                "## Issues\n\n"
+                "1. **Execution failed.** The recorded status/exit code does not "
+                "support success.\n"
+                "2. **No host fallback permitted.** Fix the sandbox and retry.\n\n"
+                "## Decision\n\n"
+                "Rejected.\n"
+            )
+        empty_issue = (
+            "3. **Empty stdout.** The process exited successfully but produced no "
+            "stdout; verify that this is expected.\n"
+            if not _text(output.get("stdout"))
+            else ""
+        )
+        return (
+            "Verdict: APPROVED_WITH_ISSUES\n\n"
+            "## Summary\n\n"
+            "The persisted tool audit records a successful `python_execute` run in "
+            "the Docker sandbox. The Reviewer verifies recorded facts rather than a "
+            "fixed environment warning.\n\n"
+            "## Verified execution\n\n"
+            f"- Status: `{execution.get('status', 'unknown')}`\n"
+            f"- Exit code: `{exit_code}`\n"
+            f"- Script path: `{_text(output.get('script_path')) or '(not reported)'}`\n"
+            f"- Sandbox container: `{_container(execution)}`\n"
+            f"- Tool duration: {_duration(execution)}\n"
+            f"- stdout:\n```text\n{stdout}\n```\n"
+            f"- stderr:\n```text\n{stderr}\n```\n\n"
+            "## Issues\n\n"
+            "1. **Input bounds.** The script has no guard for negative or very "
+            "large limits.\n"
+            "2. **Test coverage.** The demo verifies one invocation but has no "
+            f"unittest suite.{empty_issue}\n"
+            "## Suggestions\n\n"
+            "- Add bounds checks and a unittest for `primes`.\n"
+            "- Keep the persisted tool audit as execution evidence.\n\n"
+            "## Decision\n\n"
+            "Approved for the Phase 2 demonstration, with the above issues noted.\n"
+        )
+
+    def _prime_final_content(self, evidence: list[dict]) -> str:
+        execution = _execution_evidence(evidence)
+        if execution is None:
+            return (
+                "# Phase 2 Tool Demo Report: Prime-Number Script\n\n"
+                "## 3. Execution evidence\n\n"
+                "No persisted `python_execute` evidence was supplied to the "
+                "finalizer. This report does not claim successful execution and "
+                "does not invent stdout, stderr or an exit code.\n\n"
+                "## 4. Review\n\n"
+                "The Reviewer rejected the result because execution evidence is "
+                "missing.\n"
+            )
+        output = execution.get("output") or {}
+        stdout = _text(output.get("stdout")) or "(empty)"
+        stderr = _text(output.get("stderr")) or "(empty)"
+        exit_code = _exit_code(execution)
+        success = _evidence_is_success(execution)
+        verdict = "APPROVED_WITH_ISSUES" if success else "REJECTED"
+        review_summary = (
+            "The Reviewer approved the result with issues from the persisted tool "
+            "audit. Input bounds and a unittest suite remain open."
+            if success
+            else "The Reviewer rejected the result because the persisted tool audit "
+            "does not show a successful execution."
+        )
+        return (
+            "# Phase 2 Tool Demo Report: Prime-Number Script\n\n"
+            "## 1. Objective\n\n"
+            "Create a Python script that calculates prime numbers, execute it in an "
+            "isolated sandbox, verify the output, and summarize the implementation "
+            "and test results.\n\n"
+            "## 2. Implementation\n\n"
+            "The CodingAgent generated `primes.py` and used the tool dispatcher. All "
+            "values below come from the persisted SQLite `tool_calls` audit.\n\n"
+            "## 3. Execution evidence\n\n"
+            f"- Tool calls recorded: {len(evidence)}\n"
+            f"- `python_execute` status: `{execution.get('status', 'unknown')}`\n"
+            f"- Exit code: `{exit_code}`\n"
+            f"- Script path: `{_text(output.get('script_path')) or '(not reported)'}`\n"
+            f"- Sandbox container: `{_container(execution)}`\n"
+            f"- Tool duration: {_duration(execution)}\n\n"
+            f"stdout:\n```text\n{stdout}\n```\n\n"
+            f"stderr:\n```text\n{stderr}\n```\n\n"
+            "### Tool audit trail\n\n"
+            f"{_evidence_bullets(evidence)}\n\n"
+            "## 4. Review\n\n"
+            f"Verdict: `{verdict}`. {review_summary}\n\n"
+            "## 5. Limitations\n\n"
+            "This demonstration validates tool dispatch, private file operations, "
+            "Docker sandbox execution and evidence propagation. It does not validate "
+            "internet search or GitHub operations; those have separate tests.\n"
         )
 
     def _finalize_content(self, prompt: str) -> str:
@@ -626,6 +723,147 @@ def _extract_last_tool_results(prompt: str) -> list[dict] | None:
     if isinstance(value, dict):
         return [value]
     return None
+
+
+def _extract_tool_evidence(prompt: str) -> list[dict]:
+    marker = "[TOOL_EVIDENCE]"
+    index = prompt.rfind(marker)
+    if index == -1:
+        return []
+    tail = prompt[index + len(marker) :].lstrip()
+    try:
+        value, _end = json.JSONDecoder().raw_decode(tail)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    if isinstance(value, dict):
+        return [value]
+    return []
+
+
+def _execution_evidence(evidence: list[dict]) -> dict | None:
+    for item in reversed(evidence):
+        if item.get("tool_name") == "python_execute":
+            return item
+    for item in reversed(evidence):
+        output = item.get("output") or {}
+        if "stdout" in output or "exit_code" in output:
+            return item
+    return None
+
+
+def _text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _exit_code(evidence: dict) -> str:
+    output = evidence.get("output") or {}
+    value = output.get("exit_code")
+    return "missing" if value is None else str(value)
+
+
+def _duration(evidence: dict) -> str:
+    output = evidence.get("output") or {}
+    value = output.get("duration_seconds")
+    if value is None:
+        value = evidence.get("duration_seconds")
+    try:
+        return f"{float(value):.3f}s"
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _container(evidence: dict) -> str:
+    metadata = evidence.get("metadata") or {}
+    return _text(metadata.get("container")) or "(not reported)"
+
+
+def _evidence_is_success(evidence: dict) -> bool:
+    if evidence.get("status") != "success":
+        return False
+    output = evidence.get("output") or {}
+    if output.get("success") is False or output.get("timed_out") is True:
+        return False
+    exit_code = output.get("exit_code")
+    if evidence.get("tool_name") in {"python_execute", "python_test"} and exit_code is None:
+        return False
+    return exit_code in (None, 0)
+
+
+def _one_line(value: str, limit: int = 500) -> str:
+    compact = value.replace("\r", "").replace("\n", "\\n")
+    if len(compact) > limit:
+        compact = compact[:limit] + "...[truncated]"
+    return compact
+
+
+def _evidence_bullets(evidence: list[dict], *, max_text: int = 500) -> str:
+    if not evidence:
+        return "- No tool calls were recorded."
+    lines: list[str] = []
+    for item in evidence:
+        output = item.get("output") or {}
+        text = (
+            f"- `{item.get('tool_name', 'unknown')}` by "
+            f"`{item.get('agent_id', 'unknown')}`: "
+            f"status=`{item.get('status', 'unknown')}`, "
+            f"duration={_duration(item)}"
+        )
+        if "exit_code" in output:
+            text += f", exit_code=`{_exit_code(item)}`"
+        if item.get("error"):
+            text += f", error={_one_line(str(item.get('error')), max_text)}"
+        lines.append(text)
+        if output.get("stdout") not in (None, ""):
+            lines.append(f"  - stdout: `{_one_line(_text(output.get('stdout')), max_text)}`")
+        if output.get("stderr") not in (None, ""):
+            lines.append(f"  - stderr: `{_one_line(_text(output.get('stderr')), max_text)}`")
+        if output.get("content") not in (None, ""):
+            lines.append(
+                f"  - content: `{_one_line(_text(output.get('content')), max_text)}`"
+            )
+        if output.get("script_path"):
+            lines.append(f"  - script: `{_text(output.get('script_path'))}`")
+        if (item.get("metadata") or {}).get("container"):
+            lines.append(f"  - container: `{_container(item)}`")
+    return "\n".join(lines)
+
+
+def _apply_evidence_to_content(
+    content: str, evidence: list[dict], kind: str
+) -> str:
+    failures = [item for item in evidence if not _evidence_is_success(item)]
+    if kind == "review" and failures:
+        if content.startswith("Verdict:"):
+            content = re.sub(
+                r"^Verdict:[^\n]*",
+                "Verdict: REJECTED",
+                content,
+                count=1,
+            )
+        else:
+            content = "Verdict: REJECTED\n\n" + content
+    appendix = (
+        "\n\n## Tool execution evidence (persisted audit)\n\n"
+        "The following values are copied from SQLite `tool_calls`; they are not "
+        "reconstructed from model prose.\n\n"
+        + _evidence_bullets(evidence)
+    )
+    if kind == "review":
+        if failures:
+            appendix += (
+                "\n\nReview note: one or more persisted tool calls failed, so the "
+                "verdict is REJECTED."
+            )
+        else:
+            appendix += (
+                f"\n\nReview note: all {len(evidence)} persisted tool calls "
+                "succeeded."
+            )
+    return content.rstrip() + appendix + "\n"
 
 
 def _mock_action(payload: dict) -> str:

@@ -41,7 +41,11 @@ class FakeSandbox:
             exit_code=exit_code,
             duration_seconds=0.01,
             timed_out=timed_out,
-            metadata={"output_truncated": False},
+            metadata={
+                "output_truncated": False,
+                "container": "fake-container",
+                "script": "scripts/snippet.py",
+            },
         )
         self.calls: list[dict] = []
 
@@ -175,8 +179,17 @@ async def test_python_tool_through_dispatcher(tmp_path):
     )
     assert result.status is ToolResultStatus.SUCCESS
     records = store.list_tool_calls("wf")
-    assert records[0].tool_name == "python_execute"
-    assert records[0].permissions == ["python_execute"]
+    record = records[0]
+    assert record.tool_name == "python_execute"
+    assert record.permissions == ["python_execute"]
+    assert record.status is ToolResultStatus.SUCCESS
+    assert record.output["stdout"] == "42\n"
+    assert record.output["stderr"] == ""
+    assert record.output["exit_code"] == 0
+    assert record.output["success"] is True
+    assert record.duration_seconds >= 0
+    assert record.metadata["container"] == "fake-container"
+    assert record.metadata["script"] == "scripts/snippet.py"
     events.close()
     store.close()
 

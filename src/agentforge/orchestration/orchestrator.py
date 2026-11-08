@@ -32,6 +32,7 @@ from agentforge.models.task import (
     Task,
     TaskStatus,
 )
+from agentforge.models.tool import ToolEvidence
 from agentforge.models.workflow import Workflow, WorkflowStatus
 from agentforge.orchestration.assignment import (
     AssignmentCandidate,
@@ -480,6 +481,7 @@ class TaskOrchestrator:
                 goal=ctx.workflow.goal,
                 dependency_results=dependency_results,
                 delegated_results=child_results,
+                tool_evidence=self._collect_tool_evidence(ctx, task),
                 tool_context=(
                     self.tool_context_factory(task)
                     if self.tool_context_factory is not None
@@ -505,6 +507,14 @@ class TaskOrchestrator:
                 ctx, task, f"agent execution failed: {type(exc).__name__}: {exc}"
             )
             return
+
+        tool_call_ids = [
+            str(item.metadata["tool_call_id"])
+            for item in result.tool_results
+            if item.metadata.get("tool_call_id")
+        ]
+        task.metadata["tool_call_ids"] = tool_call_ids
+        task.metadata["tool_call_count"] = len(result.tool_results)
 
         finished_at = utc_now()
         self._save_agent_calls(
@@ -675,8 +685,14 @@ class TaskOrchestrator:
                 origin="delegation",
             )
 
+        child_ids = [child.task_id for child in children]
         task.metadata["delegation_rounds"] = rounds
-        task.metadata["blocked_by"] = [child.task_id for child in children]
+        task.metadata["blocked_by"] = child_ids
+        task.metadata["delegated_task_ids"] = list(
+            dict.fromkeys(
+                list(task.metadata.get("delegated_task_ids") or []) + child_ids
+            )
+        )
         transition_task(task, TaskStatus.BLOCKED)
         self.store.save_task(task)
 
@@ -895,6 +911,50 @@ class TaskOrchestrator:
             status=status.value,
             error=error,
         )
+
+    def _collect_tool_evidence(
+        self, ctx: _RunContext, task: Task
+    ) -> list[ToolEvidence]:
+        """Collect authoritative tool audit evidence from upstream tasks.
+
+        The dependency closure includes normal dependencies and tasks created by
+        agent-initiated delegation. Evidence is read from SQLite ``tool_calls``,
+        never reconstructed from LLM prose.
+        """
+        ordered: list[str] = []
+        seen: set[str] = set()
+        queue = list(task.dependencies) + list(
+            task.metadata.get("delegated_task_ids") or []
+        )
+        while queue:
+            task_id = queue.pop(0)
+            if task_id in seen:
+                continue
+            seen.add(task_id)
+            dependency = ctx.task_map.get(task_id)
+            if dependency is None:
+                continue
+            ordered.append(task_id)
+            queue.extend(dependency.dependencies)
+            queue.extend(dependency.metadata.get("delegated_task_ids") or [])
+
+        known = [task_id for task_id in ordered if task_id in ctx.task_map]
+        known.sort(
+            key=lambda task_id: (
+                ctx.task_map[task_id].created_at,
+                ctx.task_map[task_id].task_id,
+            )
+        )
+        evidence: list[ToolEvidence] = []
+        evidence_ids: set[str] = set()
+        for task_id in known:
+            for record in self.store.list_tool_calls(task_id=task_id):
+                if record.tool_call_id in evidence_ids:
+                    continue
+                evidence_ids.add(record.tool_call_id)
+                evidence.append(ToolEvidence.from_record(record))
+        evidence.sort(key=lambda item: (item.started_at, item.tool_call_id))
+        return evidence
 
     def _result_pairs(
         self, ctx: _RunContext, task_ids: list[str]

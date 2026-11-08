@@ -23,6 +23,7 @@ from agentforge.models.tool import (
     PermissionDecision,
     ToolCall,
     ToolCallRecord,
+    ToolEvidence,
     ToolResultStatus,
 )
 from agentforge.models.workflow import Workflow, WorkflowMetrics, WorkflowStatus
@@ -55,6 +56,7 @@ __all__ = [
     "TERMINAL_TASK_STATUSES",
     "ToolCall",
     "ToolCallRecord",
+    "ToolEvidence",
     "ToolResultStatus",
     "Workflow",
     "WorkflowMetrics",
