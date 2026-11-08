@@ -120,15 +120,19 @@ Example prompt entry:
 
 ## 7. Feedback and action influence
 
-Every recall records a `RetrievalEvent` with the returned memory IDs. After a task,
-the engine matches events inside the task's start/end window to procedural memories:
+Every recall records a `RetrievalEvent` with the returned memory IDs and, since
+Phase 4, the exact `workflow_id`, `task_id` and `execution_id`. After a task, the
+engine matches events by those scopes rather than by a broad time window:
 
 - if the actual tool sequence/arguments match the procedure and all calls succeed,
   feedback `used=True, success=True`, confidence increases (default +0.03);
 - if used but failed, confidence decreases (default -0.10);
-- if retrieved but not used, feedback records `used=False` with no change.
+- if retrieved but not used, feedback records `used=False` with no change;
+- cancelled workflows produce no successful feedback.
 
 This closes the loop: retrieval → action → observed outcome → confidence update.
+Concurrent workflows and repeated task attempts cannot cross-contaminate feedback.
+The legacy start/end time fallback remains only for pre-Phase-4 rows with no scope.
 
 The controlled experiment proves the action effect by changing a real tool argument:
 
@@ -212,7 +216,7 @@ Phase 3 tests cover:
 - Procedural matching is exact on tool sequence and selected argument hints. More
   general similarity/transfer is future work.
 - Memory is per agent and per namespace; no cross-agent sharing by design.
-- Feedback matching uses task start/end windows; concurrent tasks in one agent would
-  require a task-scoped retrieval context (future).
+- Feedback is scoped by exact workflow/task/execution IDs (Phase 4). Only legacy
+  unscoped rows fall back to task start/end windows.
 - Working memory is TTL-based, not a full conversational state machine.
 - No embedding API provider is configured; the interface is ready for one.

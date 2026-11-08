@@ -3,7 +3,7 @@
 **Project:** AgentForge — A Memory-Evolving Multi-Agent Collaborative Platform with
 Autonomous Task Delegation, Tool Execution, and Sandboxed Execution
 
-**Updated:** 2026-11-07
+**Updated:** 2026-11-08
 
 The project is delivered in six phases. Each phase ends with a runnable, tested
 artifact and explicit acceptance criteria. Later phases extend earlier contracts
@@ -117,7 +117,7 @@ passes with real file writes/reads and two audited tool calls.
 - Live search endpoint validation (HTTP provider only tested with MockTransport).
 - Live real-LLM tool-calling acceptance (no DeepSeek/HKGAI key).
 - Real remote Git push is intentionally not performed; local bare remote tested.
-- Full interactive approval/pause/resume is Phase 4.
+- Full interactive approval/pause/resume was delivered in Phase 4.
 
 ---
 
@@ -204,36 +204,85 @@ experiment:
 
 ---
 
-## Phase 4 — Full human-in-the-loop, permissions, pause/resume (next)
+## Phase 4 — Full human-in-the-loop, permissions, pause/resume ✅ Complete (runtime verified)
 
 **Goal:** put the human in control of risky, ambiguous, or long-running work.
 
-### Deliverables
+### Delivered
 
-1. **Clarification:** agents request missing information; task pauses; human answer is
-   injected; work resumes.
-2. **Interactive approval:** connect `ApprovalGate` to the CLI for file deletion,
-   git push, network enablement and future write actions; show scope/justification.
-3. **Pause/resume/cancel:** persist resumable workflow checkpoints and CLI commands.
-4. **Permission scopes:** per-agent allow-lists with default-deny for destructive
-   operations; approval decisions persisted.
-5. **Audit:** every approval/denial/human answer tied to task/workflow.
-6. **CLI UX:** pending approvals and clarifications visible in `repl`, `tasks` and
-   `status`.
+1. **Persistent approvals:** `ApprovalRequest` with workflow/task/agent scope, exact
+   arguments, canonical SHA-256 digest, risk, reason, expiry, decision and consumption;
+   approve/reject/cancel/expire APIs; one-time atomic consumption.
+2. **Final permission enforcement:** `ToolExecutor` checks role permissions before
+   approval handling; an approval cannot grant a missing permission or different
+   arguments. All decisions are persisted in `tool_calls`.
+3. **Interactive approval CLI/REPL:** `approvals list/show/approve/reject`; `show`
+   prints arguments, digest, risk, expiry and decision history.
+4. **Clarification:** `ClarificationRequest` lifecycle `OPEN/ANSWERED/EXPIRED/CANCELLED`;
+   pauses the workflow; answer persisted and injected as `[CLARIFICATION_ANSWER]`;
+   `clarification list/show/answer` and REPL commands.
+5. **Pause/resume/cancel:** control checks before LLM turns and tool dispatches; tasks
+   suspended to `PENDING`; workflow persisted as `PAUSED`; resume validates decisions,
+   recovers crash-left `RUNNING` tasks and replays deterministically; cancellation
+   marks tasks, closes approvals/clarifications and stops Docker sandboxes.
+6. **Idempotent replay:** successful tool effects are returned from SQLite for matching
+   workflow/task/tool/argument digest after resume, preventing duplicate side effects.
+7. **Delegation:** `reject_assignment` action, bounded automatic reassignment to
+   another fully capable agent, replacement task rewiring, `task_reassigned` events,
+   and two-level A2A delegation E2E.
+8. **Task-scoped memory feedback:** retrieval events and feedback carry exact
+   workflow/task/execution IDs; concurrent and cancelled workflows cannot
+   cross-contaminate confidence.
+9. **Metrics:** approval requests/outcomes/rate/wait, clarifications/answered/wait,
+   pause/resume/cancel counts, delegated completion/success and reassignments.
+10. **Docs/demos:** `HITL_ARCHITECTURE.md`, `APPROVAL_SYSTEM.md`,
+    `WORKFLOW_LIFECYCLE.md`, `PHASE4_REPORT.md`, `examples/phase4_demos.py`.
+
+### Verification
+
+```text
+pytest -q
+223 passed, 2 skipped
+
+pytest -m docker -q
+4 passed, 221 deselected
+
+python examples/phase4_demos.py
+A: paused → rejected → completed; file preserved
+B: paused → answered → completed
+C: two-level delegation completed (depths 2 and 3)
+```
+
+Docker sandbox, persistence and replay are real; LLM decisions in the demos are
+deterministic Mock fixtures. Real-LLM HITL behavior is NOT VERIFIED.
 
 ### Acceptance criteria
 
-- Workflow pauses at a human gate and resumes with the answer.
-- Denied actions fail safely and are audited.
-- Restarting the process preserves a paused workflow.
-- No write-capable tool bypasses approval.
-- Tests cover approval, denial, cancellation, timeout, resume.
+| Criterion | Result |
+|---|---|
+| Approval pauses real execution and persists | ✅ |
+| Human sees exact action/arguments/digest/risk | ✅ CLI + SQLite |
+| Approval bound to tool/args/workflow/task/agent | ✅ |
+| Changed arguments invalidate the approval | ✅ |
+| Rejection/expiry execute nothing | ✅ |
+| Duplicate request/resume does not repeat successful side effects | ✅ replay cache test |
+| Final permission check in ToolExecutor/ApprovalGate | ✅ |
+| Approval cannot expand permission scope | ✅ |
+| Clarification pauses and answer resumes after restart | ✅ |
+| Pause/resume handles restart and crash-left tasks | ✅ |
+| Cancel stops new work, closes HITL state, cleans Docker | ✅ |
+| Delegation accept/reject/reassign/multi-level E2E | ✅ |
+| Task-scoped memory feedback isolation | ✅ concurrency test |
+| CLI/REPL approval, clarification and workflow controls | ✅ |
+| Regression suite and Docker tests | ✅ |
 
-### Risks
+### Open items / risks
 
-- State-machine complexity; explicit workflow states + migrations.
-- Prompt fatigue; batch/group approvals.
-- Enforce permissions in the executor, not only prompts.
+- Real-LLM HITL and resume behavior require a DeepSeek/HKGAI API key.
+- Interruption is cooperative at control points; an in-flight tool is not preempted.
+- Raw LLM conversation state is not checkpointed; deterministic replay plus the
+  effect cache provides safety.
+- Prompt fatigue could be reduced later with batch/group approvals.
 
 ---
 
@@ -327,11 +376,15 @@ experiment:
 
 ## Recommended next step
 
-Proceed to **Phase 4 — Human-in-the-Loop, permissions and pause/resume**:
+Proceed to **Phase 5 — External integrations and real-provider hardening**:
 
-1. connect `ApprovalGate` to interactive CLI approvals;
-2. add clarification requests and resumable BLOCKED tasks;
-3. add pause/resume/cancel with durable checkpoints;
-4. enforce per-agent permission scopes in the tool executor;
-5. preserve memory evidence/feedback contracts across pauses;
-6. keep real-LLM memory performance explicitly NOT VERIFIED until API acceptance runs.
+1. run DeepSeek/HKGAI acceptance tests for planning, tool calling, approvals,
+   clarifications and resume behavior;
+2. validate live search and citation grounding;
+3. harden GitHub/Git operations with least-privilege credentials and dry runs;
+4. add prompt-injection/tool-output adversarial tests and secret scanning;
+5. preserve the Phase 4 invariants: final enforcement in `ToolExecutor`, exact
+   argument binding, task-scoped memory feedback, and durable lifecycle transitions.
+
+Real-LLM HITL, memory learning and resume quality remain explicitly NOT VERIFIED
+until those API acceptance runs exist.

@@ -1,9 +1,10 @@
-# AgentForge Architecture (Phase 1–3)
+# AgentForge Architecture (Phase 1–4)
 
 ## 1. Scope
 
 Phase 1 provides the multi-agent runtime; Phase 2 adds real tool execution and Docker
-sandbox isolation; Phase 3 adds evidence-first memory evolution, retrieval and feedback.
+sandbox isolation; Phase 3 adds evidence-first memory evolution, retrieval and feedback;
+Phase 4 adds persistent approvals/clarifications and workflow lifecycle control.
 The critical path is complete:
 
 - humans can talk privately to agents and publish goals to a group,
@@ -14,15 +15,18 @@ The critical path is complete:
   unified dispatcher and reason over the structured results,
 - every tool call is schema-validated, permission-checked, timed out and audited,
 - memories are derived from the tool audit with verification levels and provenance,
-- retrieval feeds agents, changes actions, and receives outcome feedback,
+- retrieval feeds agents, changes actions, and receives task-scoped outcome feedback,
+- destructive actions pause the real workflow until a parameter-bound human decision,
+- clarifications pause execution and resume with the persisted human answer,
+- workflows can be paused, resumed after restart and cancelled with cleanup,
 - results are synthesised, independently reviewed, and finalised,
-- every message, task transition, LLM call, tool call, memory event and metric is
-  persisted.
+- every message, task transition, LLM call, tool call, HITL decision, memory event and
+  metric is persisted.
 
 Phase 2 Docker sandbox verification: Docker Desktop 29.9.2, 4/4 integration tests,
-real prime-script execution. Phase 3 memory evolution is implemented and its
-pipeline is verified with Mock LLM decisions + real file tools; real-LLM learning
-performance is NOT VERIFIED. Full HITL and a web UI remain future phases.
+real prime-script execution. Phase 3 memory evolution and Phase 4 HITL are implemented
+and their pipelines are verified with Mock LLM decisions + real tools/state; real-LLM
+learning and HITL behavior are NOT VERIFIED. A web UI remains future work.
 
 ## 2. Layer diagram
 
@@ -30,12 +34,13 @@ performance is NOT VERIFIED. Full HITL and a web UI remain future phases.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ CLI / Runtime API                                                        │
 │  demo | demo-tools | run | chat | repl | tools | tool-calls | metrics    │
+│  approvals | clarification | workflows | memory                          │
 └───────────────────────────────┬──────────────────────────────────────────┘
                                 │
 ┌───────────────────────────────▼──────────────────────────────────────────┐
 │ AgentForgeRuntime                                                        │
 │ Settings → Provider → Store → Events → Memory → Workspaces → Sandboxes   │
-│ → Tools → ToolExecutor → Agents → Bus → Orchestrator                     │
+│ → Tools → ToolExecutor → Agents → Bus → HITL services → Orchestrator     │
 └───────────────┬───────────────────────────────┬──────────────────────────┘
                 │                               │
 ┌───────────────▼──────────────┐   ┌────────────▼─────────────────────────┐
@@ -43,19 +48,22 @@ performance is NOT VERIFIED. Full HITL and a web UI remain future phases.
 │  plan validation             │   │  direct / group / task / result      │
 │  capability assignment       │   │  inbox delivery + replay             │
 │  DAG execution               │   └────────────┬─────────────────────────┘
-│  bounded delegation          │                │
-│  synthesis/review/finalise   │   ┌────────────▼─────────────────────────┐
-│  metrics + audit             │   │ Agents                               │
-└───────────────┬──────────────┘   │  Coordinator / Research /            │
-                │                  │  Coding / Reviewer                   │
+│  delegation/reassignment     │                │
+│  pause/resume/cancel         │   ┌────────────▼─────────────────────────┐
+│  synthesis/review/finalise   │   │ Agents                               │
+│  metrics + audit             │   │  Coordinator / Research /            │
+└───────────────┬──────────────┘   │  Coding / Reviewer                   │
                 │                  │  complete | delegate | tool_call     │
+                │                  │  clarify | reject_assignment        │
                 │                  └────────────┬─────────────────────────┘
                 │                               │
 ┌───────────────▼───────────────────────────────▼─────────────────────────┐
-│ ToolExecutor (permissions, schemas, approvals, timeout, audit)          │
-│  File/Artifact │ Python │ Search │ Git │ ApprovalGate                   │
+│ ToolExecutor (permissions, schemas, approvals, replay, timeout, audit)  │
+│  File/Artifact │ Python │ Search │ Git │ ApprovalService                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ SandboxManager → DockerSandbox / private workspace per agent            │
+├─────────────────────────────────────────────────────────────────────────┤
+│ ClarificationService │ WorkflowControlService │ InteractionRepository    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ LLM providers (DeepSeek / HKGAI / Mock) │ MemoryEvolutionEngine        │
 │ EvolutionMemoryStore (separate DB) │ SQLite audit │ JSONL              │
@@ -73,16 +81,17 @@ abstractions. Only `runtime.py` wires concrete implementations together.
 | `models/` | Pydantic v2 contracts: messages, conversations, tasks, plans, actions, executions, workflows, agents. |
 | `config/` | `Settings` from environment/`.env`; safety limits; path resolution. |
 | `llm/` | `BaseLLMProvider`; async DeepSeek and HKGAI clients over an OpenAI-compatible protocol; deterministic mock; factory. |
-| `persistence/` | Thread-safe SQLite repository and append-only JSONL event logger. |
-| `memory/` | Per-agent memory interface; evidence-first evolution, provenance/verification, embeddings, retrieval, candidates, decay, feedback and controlled experiment. |
+| `persistence/` | Thread-safe SQLite repository (including approvals, clarifications, workflow events) and append-only JSONL event logger. |
+| `interaction/` | Persisted approval and clarification services plus the interaction repository. |
+| `memory/` | Per-agent memory interface; evidence-first evolution, provenance/verification, embeddings, task-scoped retrieval, candidates, decay, feedback and controlled experiment. |
 | `messaging/` | Conversation lifecycle and durable message routing/broadcasting. |
-| `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces), four roles, profile defaults, registry, prompt/action protocol. |
-| `orchestration/` | Plan validation, capability matching, task state machine, DAG executor, budgets, metrics integration. |
-| `evaluation/` | Completion rate, timing, token, tool, delegation and depth metrics. |
-| `tools/` | Tool contracts, registry, permissions, approvals, dispatcher, private workspaces, file/artifact/Python/search/Git tools. |
+| `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces, suspension), four roles, profile defaults, registry, prompt/action protocol. |
+| `orchestration/` | Plan validation, capability matching, task state machine, DAG executor, budgets, pause/resume/cancel, reassignment, metrics integration. |
+| `evaluation/` | Completion rate, timing, token, tool, delegation, HITL and depth metrics. |
+| `tools/` | Tool contracts, registry, permissions, approval token binding, replay cache, dispatcher, private workspaces, file/artifact/Python/search/Git tools. |
 | `sandbox/` | Docker sandbox, CLI runner, lifecycle manager, resource limits. |
-| `runtime.py` | Assembly of provider, store, tools, sandboxes, agents, messaging and orchestrator. |
-| `cli.py` | Human interface, formatted output, tool audit view, REPL. |
+| `runtime.py` | Assembly of provider, store, HITL services, tools, sandboxes, agents, messaging and orchestrator. |
+| `cli.py` | Human interface, formatted output, tool/HITL audit views, REPL. |
 
 ## 4. Domain contracts
 
@@ -107,7 +116,7 @@ Required fields: `task_id`, `workflow_id`, `description`, `required_capabilities
 `assigned_agent`, `dependencies`, `status`, `result`, `error`, timestamps, `depth`,
 and free-form metadata (`kind`, `origin`, assignment rationale, delegation state).
 
-Statuses: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`.
+Statuses: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`, `CANCELLED`.
 
 ### Execution plan
 
@@ -228,7 +237,7 @@ Execution is sequential in the current implementation for determinism and clear 
 independent of the executor, so parallel ready-task execution can be added later
 without changing the domain model.
 
-### 5.5 Task state machine
+### 5.5 Task and workflow state machines
 
 ```text
 PENDING ──► RUNNING ──► COMPLETED
@@ -236,12 +245,20 @@ PENDING ──► RUNNING ──► COMPLETED
    │           │  └──► BLOCKED ──► RUNNING (delegation resumed)
    │           │              └──► FAILED
    │           └──► FAILED
-   └──► BLOCKED
-   └──► FAILED
+   ├──► BLOCKED
+   ├──► FAILED
+   └──► CANCELLED (any non-terminal state)
 ```
 
-`COMPLETED` and `FAILED` are terminal. Every transition is validated; illegal
+`COMPLETED`, `FAILED` and `CANCELLED` are terminal. A suspended task returns to
+`PENDING` for deterministic replay. Every transition is validated; illegal
 transitions raise `InvalidTaskTransition`.
+
+Workflow statuses are `PENDING`, `RUNNING`, `PAUSED`, `BLOCKED`, `COMPLETED`,
+`FAILED`, `CANCELLED`. Pausing preserves completed tasks and persists the workflow;
+resuming validates human decisions first and recovers tasks left `RUNNING` by a
+crash. Cancellation is terminal and cleans up tasks, approvals, clarifications and
+sandboxes. See `docs/WORKFLOW_LIFECYCLE.md`.
 
 ### 5.6 Budgets and loop prevention
 
@@ -288,12 +305,23 @@ SQLite (WAL mode, thread-safe repository) stores:
 - `memory_entries` — agent-scoped namespace, kind, content, importance, metadata.
 - `tool_calls` — one row per dispatcher invocation: tool, arguments, status, output,
   error, duration, permission decision, approval status/id, permissions, timestamps.
+  Successful rows are also the replay cache for resumed tasks.
 - `artifacts` — controlled cross-agent artifact metadata and hash.
+- `approvals` — exact arguments, canonical digest, workflow/task/agent scope, risk,
+  decision, expiry, consumption and comments.
+- `clarifications` — question, context, interpretations, status, answer and timestamps.
+- `workflow_events` — append-only lifecycle stream used for metrics and CLI.
+
+The separate memory database stores retrieval events and feedback with
+`workflow_id`, `task_id` and `execution_id`.
 
 `data/events.jsonl` is an append-only audit stream (`workflow_started`,
 `planning_attempt`, `goal_published`, `task_assigned`, `task_started`,
 `task_completed`, `task_failed`, `task_delegated`, `agent_execution`, `tool_call`,
-`tool_approval`, `workflow_completed`, `workflow_failed`, `message_sent`, ...).
+`tool_approval`, `workflow_completed`, `workflow_failed`, `message_sent`,
+`approval_requested`, `approval_decided`, `approval_consumed`,
+`clarification_requested`, `clarification_answered`, `workflow_paused`,
+`workflow_resumed`, `workflow_cancelled`, `task_reassigned`, ...).
 
 The database is local and disposable; `data/` is Git-ignored. No API keys are
 persisted.
@@ -308,8 +336,11 @@ Computed from durable records at workflow end:
 - **LLM calls** = planning attempts + all task-loop turns (private chats are recorded
   but not part of a workflow).
 - **Prompt/completion tokens** = sum from provider usage.
-- **Delegation count** and **max depth**.
+- **Delegation count**, **max depth**, delegated completion/success and reassignments.
 - **Tool calls**, **tool failures**, and **summed tool time**.
+- **Approval requests/outcomes/rate** and average human wait time.
+- **Clarifications/answered** and average human wait time.
+- **Pause/resume/cancellation counts** from persisted workflow events.
 - **Failed/blocked counts** and error reasons.
 
 Mock timings are real measured durations but are tiny; they validate instrumentation,
@@ -348,9 +379,15 @@ SQLite tool_calls audit → ToolEvidence
   → procedural candidate (tool sequence + argument hints)
   → promotion only for REAL_EXECUTION with ≥2 distinct workflows and confidence ≥0.8
   → EvolutionMemoryStore.recall (embedding + keyword + decay + verification)
+  → retrieval event stored with workflow/task/execution IDs
   → [RELEVANT_MEMORY] in agent prompt
-  → real tool action → retrieval feedback → confidence update
+  → real tool action → scoped retrieval feedback → confidence update
 ```
+
+Phase 4 task-scoped feedback replaces the Phase 3 time-window join: retrieval events
+and feedback rows carry exact `workflow_id`, `task_id` and `execution_id`, so
+concurrent workflows and cancelled workflows cannot cross-contaminate confidence.
+The legacy time-window fallback applies only to old unscoped rows.
 
 Verification levels:
 
@@ -386,13 +423,15 @@ Dispatcher pipeline:
 1. tool lookup;
 2. per-agent permission policy (default deny);
 3. JSON-Schema argument validation;
-4. approval gate for destructive permissions;
-5. timeout (`asyncio.wait_for`);
-6. tool execution with validated Pydantic arguments;
-7. structured exception handling;
-8. output schema validation;
-9. output size cap;
-10. SQLite `tool_calls` + JSONL audit.
+4. successful-effect replay lookup for resumed tasks;
+5. approval binding/expiry/one-time consumption, or persist a pending request and
+   suspend the task/workflow;
+6. timeout (`asyncio.wait_for`);
+7. tool execution with validated Pydantic arguments;
+8. structured exception handling;
+9. output schema validation;
+10. output size cap;
+11. SQLite `tool_calls` + JSONL audit.
 
 The result (success, error, timeout, denied, pending approval) is returned to the
 agent as `[TOOL_RESULTS]`, marked untrusted, and the agent continues reasoning. Tool
@@ -466,13 +505,36 @@ inside the repository; commit is scoped to those paths. `git_push` is always
 approval-gated and pending by default. The Git environment is scrubbed of tokens,
 secrets, keys and SSH agent variables. Tests use only a temporary local bare remote.
 
-## 15. Human-in-the-loop boundary
+## 15. Human-in-the-loop architecture
 
-Phase 2 introduces an `ApprovalGate` interface used by destructive tools. The default
-`PendingApprovalGate` returns `PENDING_APPROVAL` without executing the action; tests
-use explicit approved/denied gates. There is no interactive approval channel,
-pause/resume workflow, clarification loop or permission-scope UI yet. Those belong to
-Phase 4; no fake HITL behaviour is implemented.
+Phase 4 replaces the placeholder `PendingApprovalGate` with a persistent
+`ApprovalService` and adds `ClarificationService` and `WorkflowControlService`.
+
+```text
+Tool needs approval
+  → ToolExecutor persists ApprovalRequest (tool + arguments + SHA-256 + scope)
+  → raises ApprovalRequired
+  → BaseAgent raises AgentSuspension("approval")
+  → task → PENDING, workflow → PAUSED, agent active task cleared
+  → human decides through CLI/REPL
+  → workflows resume
+  → ToolExecutor validates digest/scope/expiry, consumes token once, executes
+```
+
+Clarification and human pause share the suspension path. Cancellation marks
+unfinished tasks `CANCELLED`, closes pending approvals/clarifications, stops the
+workflow's sandboxes and is terminal.
+
+Resume replays the task from persisted state, not a raw conversation checkpoint.
+Every attempt receives a new `execution_id`; `ToolExecutor` returns previously
+successful tool outputs for identical `(workflow, task, tool, argument_digest)` calls
+with `replayed=True`, so completed side effects are not repeated. Tasks left
+`RUNNING` by a crash are reset to `PENDING` and marked `recovered_from_running`.
+
+Approval enforcement is in `ToolExecutor`/`ApprovalGate`, never in prompts.
+Permissions are checked first and an approval cannot grant a missing permission or a
+different argument set. Details: `docs/HITL_ARCHITECTURE.md`,
+`docs/APPROVAL_SYSTEM.md`, `docs/WORKFLOW_LIFECYCLE.md`.
 
 ## 16. Security and safety
 
@@ -508,11 +570,12 @@ reusing models, messaging, tools, sandboxing and persistence.
    add schema/success/failure/audit tests.
 4. **New sandbox backend:** implement `BaseSandbox` with equivalent isolation and
    quotas; keep the no-host-fallback rule.
-5. **Future memory work:** add a learned embedding provider, fuzzy procedure
-   transfer, and task-scoped retrieval contexts; keep provenance/verification rules.
-6. **Full HITL:** connect `ApprovalGate` and a clarification gateway to interactive
-   CLI/UI flows and resumable BLOCKED tasks.
+5. **Memory work:** add a learned embedding provider and fuzzy procedure transfer;
+   keep provenance/verification and exact task-scoped feedback rules.
+6. **HITL extensions:** add richer approval policies, delegated approvers or a UI on
+   top of `ApprovalService`/`ClarificationService`; keep argument binding and the
+   final `ToolExecutor` check intact.
 7. **Concurrency:** execute independent ready tasks and independent tool calls with
-   `asyncio.gather` while preserving state-machine and audit semantics.
+   `asyncio.gather` while preserving state-machine, replay and audit semantics.
 8. **Evaluation:** add real-API, Docker, and live-search acceptance runs with clear
    PASS/SKIPPED/NOT VERIFIED reporting.

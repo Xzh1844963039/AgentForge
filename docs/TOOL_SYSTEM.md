@@ -20,8 +20,9 @@
 | `ToolRegistry` | `tools/base.py` | Registration, lookup, prompt catalog |
 | `ToolExecutionContext` | `tools/base.py` | Agent, workflow, task, private workspace, sandbox |
 | `ToolPermissionPolicy` | `tools/policy.py` | Default-deny per-agent permission grants and approval requirements |
-| `ApprovalGate` | `tools/approval.py` | Pending/approved/denied decision interface |
-| `ToolExecutor` | `tools/executor.py` | The only dispatcher: permissions, schemas, approvals, timeout, output cap, audit |
+| `ApprovalGate` | `tools/approval.py` | Approval interface, argument digest, `ApprovalRequired` suspension signal |
+| `ApprovalService` | `interaction/approval_service.py` | Persistent parameter-bound approvals, TTL, one-time consumption |
+| `ToolExecutor` | `tools/executor.py` | The only dispatcher: permissions, schemas, approvals, replay, timeout, output cap, audit |
 | `ToolCallRecord` | `models/tool.py` | Durable audit record |
 | `WorkspaceManager` | `tools/workspace.py` | Secure private file paths and atomic I/O |
 | `ArtifactStore` | `tools/artifact_store.py` | Controlled cross-agent file transfer |
@@ -92,16 +93,18 @@ The result is appended to the agent's conversation as a `[TOOL_RESULTS]` message
 1. **Lookup** — unknown tools return `error`.
 2. **Permission policy** — all declared permissions must be granted; otherwise `denied`.
 3. **Input schema validation** — JSON Schema (`Draft 2020-12`); invalid arguments return a detailed error and never reach the tool.
-4. **Approval** — if the tool or its permissions require approval, the gate is asked:
-   - `PENDING` → `pending_approval`, no side effect;
-   - `DENIED` → `denied`, no side effect;
+4. **Replay cache** — on a resumed task, a matching prior SUCCESS for the same workflow/task/tool/arguments returns the recorded output with `replayed=true`; the tool body is not called.
+5. **Approval** — if the tool or its permissions require approval:
+   - no token → persist a `PENDING` `ApprovalRequest`; runtime default raises `ApprovalRequired` and suspends the task; no side effect;
+   - token → validate tool name, canonical argument digest, workflow/task/agent, status and expiry, then consume once;
+   - `REJECTED`/`EXPIRED`/`CANCELLED` → `denied`, no side effect;
    - `APPROVED` → continue.
-5. **Timeout** — `asyncio.wait_for` with the tool's timeout.
-6. **Execution** — tool handler with validated Pydantic arguments.
-7. **Exception handling** — unexpected exceptions become structured `error` results, not crashes.
-8. **Output validation** — success output must satisfy the tool's output schema.
-9. **Output cap** — oversized output is truncated with `truncated: true` metadata.
-10. **Audit** — SQLite `tool_calls` + JSONL `tool_call` event, including duration, permission decision, approval status, and arguments.
+6. **Timeout** — `asyncio.wait_for` with the tool's timeout.
+7. **Execution** — tool handler with validated Pydantic arguments.
+8. **Exception handling** — unexpected exceptions become structured `error` results, not crashes.
+9. **Output validation** — success output must satisfy the tool's output schema.
+10. **Output cap** — oversized output is truncated with `truncated: true` metadata.
+11. **Audit** — SQLite `tool_calls` + JSONL `tool_call` event, including duration, permission decision, approval status, and arguments.
 
 ## 5. Permission matrix
 
@@ -120,7 +123,12 @@ Default grants (see `tools/policy.py`):
 | `artifact_read` | ✅ | ✅ | ✅ | ✅ |
 | `artifact_write` | ✅ | ✅ | ✅ | — |
 
-Approval is mandatory for `file_delete` and `git_push` regardless of grant. The default `PendingApprovalGate` never approves automatically; Phase 4 will connect it to interactive human decisions. Tests use `AutoApprovalGate` to exercise approved/denied paths.
+Approval is mandatory for `file_delete`, `git_push`, `update_file`, and
+`write_file overwrite=true` regardless of grant. In the runtime, `ApprovalService`
+persists the request and pauses the workflow until a human decision; tokens are bound
+to exact arguments and scope and consumed once. Tests also use `AutoApprovalGate` to
+exercise immediate approved/denied paths. An approval never grants a missing
+permission.
 
 ## 6. Agent tool loop
 
@@ -167,8 +175,8 @@ Rules:
 - Every path component is checked for symlinks; the resolved path must remain under the agent root.
 - Writes are atomic (temp file + `os.replace`), with a per-file byte cap.
 - Reads are capped and report truncation.
-- `write_file` refuses to overwrite unless `overwrite=true`.
-- `update_file` requires an existing file and supports replace/append.
+- `write_file` refuses to overwrite unless `overwrite=true`; explicit overwrite requires approval.
+- `update_file` requires an existing file and supports replace/append; both modes require approval.
 - `delete_file` requires approval.
 - Listing and search return relative POSIX paths and are capped.
 - There is no tool that can read another agent's workspace. Cross-agent data moves only through artifacts.
@@ -217,21 +225,27 @@ Residual risk: DNS rebinding between validation and the actual connection is not
 - Read: status, diff, log.
 - Write: add and commit require explicit file paths within the repository; path traversal and absolute paths are rejected.
 - `git_commit` stages the explicit paths and commits only that scope.
-- `git_push` always requires approval and returns `pending_approval` by default. No credentials are injected; a credential-scrubbed environment is used.
+- `git_push` always requires approval. In the default runtime it persists a pending request and pauses the workflow; no push occurs until a human approves the exact command/scope. No credentials are injected; a credential-scrubbed environment is used.
 - Tests only use a temporary local bare remote, never a real remote.
 
 ## 12. Audit and metrics
 
 SQLite `tool_calls` columns include: tool call ID, workflow, task, agent, tool, arguments, status, output, error, duration, permission decision, approval status/id, permissions, start/end, metadata.
 
-JSONL `tool_call` events mirror status, duration, approval status and error. CLI:
+JSONL `tool_call` events mirror status, duration, approval status and error. HITL
+transitions also emit `approval_requested`, `approval_decided`, `approval_consumed`
+and `tool_effect_replayed`. CLI:
 
 ```powershell
 agentforge tools
 agentforge tool-calls --workflow <id> --agent coding
+agentforge approvals list --workflow <id>
+agentforge approvals show <approval_id>
 ```
 
-Workflow metrics add `tool_calls`, `tool_failures`, `tool_seconds`.
+Workflow metrics add `tool_calls`, `tool_failures`, `tool_seconds`, approval
+requests/outcomes/rate/wait time, clarifications/wait time, pauses, resumes,
+cancellations, delegated completion/success and reassignments.
 
 ## 13. Extending the tool system
 

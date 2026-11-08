@@ -216,8 +216,9 @@ installed Docker Desktop for the verification run.
   model and should require approval.
 - **DNS rebinding** — the web-fetch tool validates DNS before connecting; httpx may
   resolve again. A future phase should pin the validated IP or use a controlled proxy.
-- **Full HITL** — approvals are an interface only. Phase 4 will add interactive
-  approval, pause/resume, and permission scopes.
+- **HITL boundary** — Phase 4 persists approvals/clarifications and pauses workflows,
+  but sandbox interruption is cooperative: a running container is stopped on
+  cancellation or runtime shutdown, not preempted mid-command by a pause.
 
 ## 12. Acceptance checklist
 

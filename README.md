@@ -1,8 +1,8 @@
 # AgentForge
 
-**A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, and Docker sandbox isolation.**
+**A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, Docker sandbox isolation, and durable human-in-the-loop control.**
 
-AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally; Phase 1 delivered the multi-agent runtime, and Phase 2 adds a validated tool-execution framework and a Docker-backed sandbox.
+AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally: Phase 1 delivered the multi-agent runtime, Phase 2 the validated tool framework and Docker sandbox, Phase 3 evidence-first memory evolution, and Phase 4 persistent approvals, clarifications and workflow pause/resume/cancel.
 
 ## Current status
 
@@ -11,11 +11,25 @@ AgentForge is the final project for the HKUST NLP/Agent course. It is built incr
 | Phase 1 — Runtime, messaging, DAG orchestration, persistence, CLI | ✅ complete |
 | Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ complete; Docker integration verified (4/4) |
 | Phase 3 — Evidence-first memory evolution, procedural promotion, feedback, ablation | ✅ complete (pipeline verified; real-LLM learning NOT VERIFIED) |
-| Phase 4 — Full human-in-the-loop | ⏳ next |
+| Phase 4 — Human-in-the-loop, approvals, clarification, pause/resume/cancel, reassignment | ✅ complete (runtime verified; real-LLM HITL NOT VERIFIED) |
 
-**Verified on 2026-11-08:** `205 passed, 2 skipped` in the full pytest suite with Docker running, `78%` statement coverage (`93%` for `agentforge.memory`), Ruff F/E9 clean. The 2 skips are one Windows symlink-privilege test and the Docker-missing failure-path test. Docker integration: **4/4 passed**. Real-LLM memory learning is **NOT VERIFIED** (no API key).
+**Verified on 2026-11-08:** `225 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **4/4 passed**; Ruff F/E9 clean. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM HITL and memory learning are **NOT VERIFIED** (no API key; deterministic Mock decisions drive the runtime).
 
-Phase 2 highlights:
+Phase 4 highlights:
+
+- `ApprovalService` persists parameter-bound approval requests with risk, expiry and a canonical argument digest.
+- File deletion, in-place updates and explicit overwrites (`write_file overwrite=true`) are approval-gated alongside `git_push`.
+- Approval decisions pause the real task and workflow; resuming consumes the token exactly once in `ToolExecutor`.
+- Changing tool arguments invalidates the old approval instead of widening its scope.
+- `ClarificationService` supports `OPEN → ANSWERED / EXPIRED / CANCELLED`, persists across restart and injects the human answer into the resumed task prompt.
+- Workflow `PAUSED`, `CANCELLED` and restart recovery use real control checks before LLM turns and tool dispatches.
+- Successful tool effects are replayed from the SQLite audit after pause/resume/crash, preventing duplicate side effects.
+- Cancelling a workflow cancels pending approvals/clarifications, marks unfinished tasks cancelled and stops its Docker sandboxes.
+- Delegated tasks can be rejected and automatically reassigned to another fully capable agent; two-level A2A delegation is tested end-to-end.
+- Memory retrieval feedback is scoped by workflow/task/execution ID instead of a time window.
+- Metrics cover approvals, clarifications, pauses, resumes, cancellations, delegation outcomes and reassignments.
+
+Phase 3/2 highlights:
 
 - A unified `ToolExecutor` with JSON-Schema validation, per-agent permissions, timeouts, output limits, approval gates, and durable audit.
 - Agents request tools through structured `tool_call` actions, receive real structured results, and continue reasoning.
@@ -102,7 +116,29 @@ Goal:
 
 The CodingAgent calls `python_syntax_check` and `python_execute`; the script runs inside the non-root, network-disabled Docker sandbox. stdout, stderr, exit code, script path and tool audit are shown. **If Docker is unavailable, `demo-tools` exits with code 2 and prints the prerequisite; there is no host fallback.**
 
-### 6. Run the Phase 3 memory experiment (no Docker required)
+### 6. Run the Phase 4 HITL demos (no Docker required)
+
+```powershell
+python examples/phase4_demos.py
+```
+
+The script runs three end-to-end demos through the real runtime, message bus, task
+state machine, approval/clarification services, SQLite audit and replay cache:
+
+- **A — approval rejection:** CodingAgent requests deletion of a real workspace
+  file, the human rejects it, the workflow resumes, the file is preserved and the
+  tool audit records `pending_approval → denied`.
+- **B — clarification:** the agent asks a question, the workflow pauses and
+  persists, the human answers `90 days`, and the resumed task receives the answer.
+- **C — two-level delegation:** Coding delegates to Research, Research delegates
+  to Reviewer, both delegated tasks complete at depths 2 and 3, and the parent
+  workflow produces a final report.
+
+Only LLM decisions are deterministic fixtures. Tool execution, file effects,
+messages, state transitions, approvals, clarifications and persistence are real.
+Real-provider HITL remains **NOT VERIFIED** without an API key.
+
+### 7. Run the Phase 3 memory experiment (no Docker required)
 
 ```powershell
 python -m agentforge memory experiment
@@ -115,7 +151,7 @@ without memory. The verified run changes the tool argument from
 LLM decisions are a deterministic Mock policy, so the result proves the memory
 pipeline, **not real-LLM learning performance**.
 
-### 7. Run the tests
+### 8. Run the tests
 
 ```powershell
 pytest -q
@@ -125,15 +161,18 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-205 passed, 2 skipped
+225 passed, 2 skipped
 ```
+
+The Phase 4 tests exercise approvals, expiry and binding, clarifications,
+pause/resume/cancel, restart recovery, duplicate-side-effect prevention,
+role-permission boundaries, rejection/reassignment, two-level delegation,
+task-scoped memory feedback, CLI commands and the new metrics.
 
 Optional coverage:
 
 ```powershell
 pytest --cov=agentforge --cov-report=term -q
-# TOTAL: 5977 statements, 1326 missed, 78% coverage
-# agentforge.memory: 93% coverage
 ```
 
 ---
@@ -236,6 +275,22 @@ Memory is evidence-first: entries reference persisted `tool_calls` IDs and carry
 support becomes high-confidence procedural memory. See
 [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md).
 
+### Human-in-the-loop
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AGENTFORGE_APPROVAL_TTL_SECONDS` | `3600` | Time before a pending approval expires |
+| `AGENTFORGE_CLARIFICATION_TTL_SECONDS` | `86400` | Time before an open clarification expires |
+| `AGENTFORGE_MAX_REASSIGNMENTS` | `2` | Max automatic reassignments after a delegated task rejection |
+| `AGENTFORGE_WORKFLOW_EVENT_LIMIT` | `1000` | Max lifecycle events returned per workflow |
+
+Approvals and clarifications are stored in the main SQLite database. They contain
+the exact action, arguments, canonical SHA-256 argument digest, scope
+(workflow/task/agent), risk, expiry and decision. See
+[docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md),
+[docs/APPROVAL_SYSTEM.md](docs/APPROVAL_SYSTEM.md) and
+[docs/WORKFLOW_LIFECYCLE.md](docs/WORKFLOW_LIFECYCLE.md).
+
 ---
 
 ## CLI reference
@@ -256,13 +311,22 @@ agentforge conversations               Conversation list
 agentforge messages [--all]            Messages / transcript replay
 agentforge history                     Workflow history
 agentforge result <workflow_id>        Final report
-agentforge metrics [workflow_id]       Completion, timing, tokens, tools
+agentforge metrics [workflow_id]       Completion, timing, tokens, tools, HITL
+agentforge approvals list/show         Inspect persisted approval requests
+agentforge approvals approve/reject    Record a human decision
+agentforge clarification list/show     Inspect clarification requests
+agentforge clarification answer        Answer a clarification
+agentforge workflows list/show         Inspect workflow and lifecycle events
+agentforge workflows pause/resume      Pause or resume a workflow
+agentforge workflows cancel            Cancel and clean up a workflow
 ```
 
 Agent IDs: `coordinator`, `research`, `coding`, `reviewer`.
 
 REPL: `/agents`, `/tools`, `/tool-calls [workflow_id]`, `/dm`, `/goal`, `/tasks`,
-`/messages`, `/conversations`, `/history`, `/result`, `/metrics`, `/quit`.
+`/messages`, `/conversations`, `/history`, `/result`, `/metrics`, `/approvals`,
+`/approve`, `/reject`, `/clarifications`, `/answer`, `/workflows`, `/pause`,
+`/resume`, `/cancel`, `/quit`.
 
 Global flags `--data-dir`, `--provider`, `--log-level` apply to every command.
 
@@ -282,11 +346,18 @@ The `ToolExecutor` then:
 
 1. resolves the tool and checks the per-agent permission policy (default deny),
 2. validates arguments against the tool's JSON Schema,
-3. requests human approval for destructive permissions such as file deletion and git push,
-4. executes with a hard timeout and output cap,
-5. validates structured output,
-6. records the call in SQLite (`tool_calls`) and JSONL,
-7. returns stdout/structured output/error to the agent, which continues reasoning.
+3. reuses a recorded successful effect when replaying a resumed task with identical arguments,
+4. for approval-gated operations, validates the bound token and consumes it exactly once,
+   or persists a pending request and suspends the workflow,
+5. executes with a hard timeout and output cap,
+6. validates structured output,
+7. records the call in SQLite (`tool_calls`) and JSONL,
+8. returns stdout/structured output/error to the agent, which continues reasoning.
+
+Approval enforcement is inside the dispatcher, not in the prompt. An agent role that
+lacks `file_delete` is denied before any approval is considered; an approval can
+only authorize the exact tool, arguments, workflow, task and agent that were
+reviewed.
 
 Synthesis, review and finalization receive a structured `[TOOL_EVIDENCE]` block built
 from the persisted `tool_calls` audit (stdout, stderr, exit code, success, duration,
@@ -297,7 +368,7 @@ Built-in tools:
 
 | Tool | Purpose |
 |---|---|
-| `list_files`, `read_file`, `write_file`, `update_file`, `delete_file`, `search_files` | Private Markdown/TXT workspace; delete requires approval |
+| `list_files`, `read_file`, `write_file`, `update_file`, `delete_file`, `search_files` | Private Markdown/TXT workspace; delete, update and explicit overwrite require approval |
 | `share_artifact`, `fetch_artifact` | Controlled cross-agent file transfer |
 | `python_syntax_check` | Static parse only (no execution) |
 | `python_execute`, `python_test` | Python inside the Docker sandbox only |
@@ -350,6 +421,37 @@ See [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) and
 
 ---
 
+## Human-in-the-loop at a glance
+
+Phase 4 turns approval gates into an actual workflow protocol:
+
+```text
+delete_file requested
+  → ToolExecutor persists a PENDING approval bound to exact arguments
+  → task set PENDING, workflow PAUSED, agent execution stops
+  → human: agentforge approvals show / approve | reject
+  → agentforge workflows resume <id>
+  → approved token consumed exactly once; or denial returned with no side effect
+```
+
+- Clarifications use `agentforge clarification list/show/answer` and resume with the
+  answer injected into the task prompt.
+- `agentforge workflows pause|cancel` writes a durable control state; a live task
+  observes it at the next control check.
+- A task left `RUNNING` by a crash is recovered to `PENDING` on resume and replayed.
+- The replay cache returns prior successful tool outputs for identical
+  workflow/task/tool/arguments instead of executing them twice.
+- Cancellation closes pending approvals/clarifications, marks tasks cancelled and
+  stops the workflow's Docker sandboxes.
+- Workflow metrics count approvals, clarifications, pauses, resumes, cancellations,
+  delegated tasks, success rate and reassignments.
+
+See [docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md),
+[docs/APPROVAL_SYSTEM.md](docs/APPROVAL_SYSTEM.md) and
+[docs/WORKFLOW_LIFECYCLE.md](docs/WORKFLOW_LIFECYCLE.md).
+
+---
+
 ## Project layout
 
 ```text
@@ -361,17 +463,18 @@ See [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) and
 │   ├── llm/             provider interface, DeepSeek, HKGAI, mock
 │   ├── tools/           dispatcher, policy, approvals, file/artifact/Python/search/Git tools
 │   ├── sandbox/         Docker sandbox, command runner, manager
+│   ├── interaction/     approval/clarification services and HITL repository
 │   ├── memory/          evidence-first evolution, embeddings, retrieval, feedback, experiment
-│   ├── models/          Pydantic contracts (messages, tasks, tools, workflows)
-│   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, ...)
-│   ├── evaluation/      workflow metrics including tool usage
+│   ├── models/          Pydantic contracts (messages, tasks, tools, workflows, approvals)
+│   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, HITL tables)
+│   ├── evaluation/      workflow metrics including HITL and tool usage
 │   ├── config/          centralized environment settings
 │   ├── runtime.py       dependency wiring and public API
 │   ├── cli.py           CLI and REPL
 │   └── cli_memory.py    memory list/search/stats/clear/experiment
-├── tests/               207 collected: unit, integration, protocol, CLI, Docker-gated
-├── examples/            mock/file-tool/memory demos, real-provider example
-├── docs/                architecture, plan, Phase 1/2/3 reports, tool/sandbox/memory docs
+├── tests/               227 collected: unit, integration, protocol, HITL, CLI, Docker-gated
+├── examples/            mock/file-tool/memory/Phase-4 HITL demos, real-provider example
+├── docs/                architecture, plan, Phase 1–4 reports, tool/sandbox/memory/HITL docs
 ├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
 ├── .env.example
 ├── pyproject.toml
@@ -382,11 +485,21 @@ See [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) and
 
 ## Persistence and observability
 
-SQLite tables: `conversations`, `messages`, `tasks`, `agent_executions`, `workflows`, `memory_entries`, `tool_calls`, `artifacts`.
+SQLite tables: `conversations`, `messages`, `tasks`, `agent_executions`, `workflows`,
+`memory_entries`, `tool_calls`, `artifacts`, `approvals`, `clarifications` and
+`workflow_events` (schema version 3).
 
-Each tool call records: agent, workflow, task, tool name, arguments, status, output, error, duration, permission decision, approval status/id, permissions, timestamps and metadata. JSONL events mirror lifecycle and tool activity.
+Each tool call records: agent, workflow, task, tool name, arguments, status, output,
+error, duration, permission decision, approval status/id, permissions, timestamps
+and metadata. Approval rows retain the reviewed arguments, digest, risk, expiry,
+decision, comment and one-time consumption time. Clarification rows retain the
+question, context, interpretations and answer. JSONL events mirror lifecycle, HITL
+and tool activity.
 
-Metrics now include tool calls, tool failures and summed tool time alongside completion rate, workflow/task duration, LLM calls, tokens, delegation count and depth.
+Metrics include completion rate, workflow/task duration, LLM calls, tokens, tool
+calls/failures/time, delegation count/depth/success, reassignments, approval
+outcomes and wait time, clarification count/wait time, and pause/resume/cancel
+counts.
 
 ---
 
@@ -395,21 +508,24 @@ Metrics now include tool calls, tool failures and summed tool time alongside com
 Implemented:
 
 - Human↔Agent private chat, Human→Group goals, Agent→Agent, Agent→Group.
-- LLM-generated task DAG, capability assignment, bounded delegation.
+- LLM-generated task DAG, capability assignment, bounded delegation, rejection and reassignment.
 - Tool calls through a unified dispatcher with real results and iterative reasoning.
 - Private file tools, artifacts, Docker sandbox, Python execution (Docker-gated), search providers, local Git tools.
-- Approval gates for file deletion and git push (default: pending).
+- Persisted, argument-bound approvals with expiry and one-time consumption.
+- Persisted clarifications with `OPEN/ANSWERED/EXPIRED/CANCELLED` lifecycle.
+- Workflow pause/resume/cancel with real control checks, restart recovery and Docker cleanup.
+- Deterministic task replay and a successful-effect replay cache to prevent duplicate side effects.
 - Structured tool evidence from the SQLite audit is propagated into synthesis, review and final report prompts.
-- SQLite + JSONL observability, CLI, deterministic demos, 205 passing tests.
+- Task-scoped memory retrieval and feedback (workflow/task/execution IDs).
+- SQLite + JSONL observability, expanded metrics, CLI/REPL, deterministic demos, 225 passing tests.
 
 Not implemented / pending:
 
 - **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
-- **Real remote Git push** — only a temporary local bare remote was tested; default approval gate prevents pushes.
-- **Real LLM tool-calling** — no DeepSeek/HKGAI key; mock decisions are deterministic fixtures.
-- **Real-LLM memory learning performance** — NOT VERIFIED; the Phase 3 experiment uses a deterministic Mock decision policy and real file tools.
-- **Full HITL** — interactive approval/pause/resume is Phase 4.
-- **Web UI**, parallel tool execution, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
+- **Real remote Git push** — only a temporary local bare remote was tested; approval prevents unapproved pushes.
+- **Real LLM tool-calling and HITL** — no DeepSeek/HKGAI key; Mock decisions are deterministic fixtures.
+- **Real-LLM memory learning performance and resume behavior** — NOT VERIFIED; Phase 3/4 use deterministic Mock decision policies with real tools/state.
+- **Web UI**, parallel tool execution, preemptive mid-tool interruption, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
 
 ---
 
@@ -431,7 +547,7 @@ docker ps -a
 # no AgentForge containers left
 ```
 
-The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 3 suite is `205 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 4 suite is `225 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
 
 The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 
@@ -444,7 +560,10 @@ The final report is grounded in the persisted `tool_calls` audit: stdout, stderr
 | `Docker prerequisite missing` | Install/start Docker Desktop with WSL2; verify `docker info`. |
 | `Docker sandbox unavailable` in a tool result | Same; Python tools never fall back to host execution. |
 | `tool permission denied` | The agent role lacks the tool permission; see `agentforge tools`. |
-| `pending_approval` / `git_push` blocked | Phase 2 has no interactive approval channel; push requires an approved gate. |
+| `pending_approval` / workflow paused | Inspect with `agentforge approvals list`, decide it, then `agentforge workflows resume <id>`. |
+| `approval ... still pending` on resume | Approve or reject the request first; resume cannot bypass a pending decision. |
+| `approval has expired` | The TTL elapsed; the tool was not executed. Resume will ask for a fresh approval if the model retries. |
+| Cancelled workflow will not resume | Cancellation is terminal; start a new goal instead. |
 | `No database found` | Run a demo first or pass the same `--data-dir`. |
 | `no API key is configured` | Fill `.env` or use `AGENTFORGE_LLM_PROVIDER=mock`. |
 | PowerShell blocks activation | `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`. |
@@ -458,10 +577,14 @@ The final report is grounded in the persisted `tool_calls` audit: stdout, stderr
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/TOOL_SYSTEM.md](docs/TOOL_SYSTEM.md)
 - [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md)
+- [docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md)
+- [docs/APPROVAL_SYSTEM.md](docs/APPROVAL_SYSTEM.md)
+- [docs/WORKFLOW_LIFECYCLE.md](docs/WORKFLOW_LIFECYCLE.md)
 - [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md)
 - [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md)
 - [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md)
 - [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md)
+- [docs/PHASE4_REPORT.md](docs/PHASE4_REPORT.md)
 - [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)
 
 ## License
