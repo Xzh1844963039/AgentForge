@@ -33,7 +33,7 @@ rather than replacing them.
 
 ---
 
-## Phase 2 — Tool execution and Docker sandbox isolation ✅ Implemented (Docker integration pending)
+## Phase 2 — Tool execution and Docker sandbox isolation ✅ Complete (Docker verified)
 
 ### Objectives
 
@@ -76,22 +76,23 @@ rather than replacing them.
 
 ```text
 pytest -q
-175 passed, 5 skipped in ~34s
+186 passed, 2 skipped in ~56s
 
 pytest --cov=agentforge --cov-report=term -q
-TOTAL: 4637 statements, 1100 missed, 76% coverage
+TOTAL: 4835 statements, 1062 missed, 78% coverage
 ```
 
 Skips:
 
-- 4 Docker integration tests — Docker CLI/daemon unavailable on this machine.
 - 1 Windows symlink-escape test — the OS denied symlink creation to the test user;
   the implementation checks every path component and rejects symlinks.
+- 1 Docker-missing failure-path test — skipped because Docker was available for the
+  verification run.
 
-Docker end-to-end demo `agentforge demo-tools` exits with code 2 and prints the
-prerequisite; it does **not** run Python on the host. The non-Docker file-tool demo
-(`examples/tool_file_demo.py`) passes with real file writes/reads and two audited tool
-calls.
+Docker end-to-end demo `agentforge demo-tools` passes (exit 0) and returns the real
+stdout `Primes up to 20: [2, 3, 5, 7, 11, 13, 17, 19]`, exit code 0 and sandbox
+container metadata. The non-Docker file-tool demo (`examples/tool_file_demo.py`) also
+passes with real file writes/reads and two audited tool calls.
 
 ### Acceptance criteria
 
@@ -104,16 +105,18 @@ calls.
 | Tool results feed back to agents | ✅ |
 | Delegation with tools, count > 0 | ✅ |
 | Python never executes on host | ✅ failure-path test |
-| Docker isolation | ⏳ implementation complete, integration SKIPPED |
+| Docker isolation | ✅ 4/4 Docker integration tests PASS; no leftover containers |
 | Search SSRF defenses | ✅ unit tests |
 | Local Git + push approval | ✅ local bare remote tests |
 | Regression | ✅ all Phase 1 tests pass |
 
 ### Open items
 
-- Run Docker integration tests and `demo-tools` on a Docker-enabled machine.
+- Tool evidence propagation is implemented and regression-tested; keep the
+  `[TOOL_EVIDENCE]` contract stable in later phases.
 - Live search endpoint validation (HTTP provider only tested with MockTransport).
 - Live real-LLM tool-calling acceptance (no DeepSeek/HKGAI key).
+- Real remote Git push is intentionally not performed; local bare remote tested.
 - Full interactive approval/pause/resume is Phase 4.
 
 ---

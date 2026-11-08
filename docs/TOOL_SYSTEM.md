@@ -143,6 +143,18 @@ continue reasoning
 
 Every LLM turn is recorded as an `agent_executions` row, so tool-loop token and latency costs are visible. Tool calls are recorded separately in `tool_calls`. The final task result includes the agent's final action content; the task result then flows through the normal DAG and governance review.
 
+### 6.1 Structured evidence for synthesis, review and final report
+
+Task prose alone is not sufficient evidence. The orchestrator:
+
+1. computes the task's transitive dependency closure, including tasks created by agent-initiated delegation;
+2. reads the corresponding `tool_calls` rows from SQLite;
+3. converts them to `ToolEvidence` records containing tool, agent, task, status, success, output, error, duration, permissions, approval state and sandbox metadata;
+4. injects them into synthesis/review/finalize prompts as a JSON `[TOOL_EVIDENCE]` block;
+5. records `tool_call_ids` and `tool_call_count` on the producing task.
+
+Report generation must use this evidence, not regexes over LLM prose. The Mock provider builds its prime report from the recorded stdout/stderr/exit code/duration/container and distinguishes success, empty stdout, nonzero exit, missing exit code, exception, timeout and multiple calls. Real LLM providers receive the same evidence block. Reviews use the recorded facts: a failed/timeout call produces `REJECTED`; a successful call is approved with issues. No fixed "Docker is required" warning is emitted when the audit shows a real successful execution.
+
 ## 7. File tools
 
 Tools: `list_files`, `read_file`, `write_file`, `update_file`, `delete_file`, `search_files`.

@@ -4,13 +4,11 @@
 
 ## 1. Status
 
-The Docker sandbox is fully implemented, but **not verified on the current development
-machine** because the Docker CLI and daemon are unavailable. Docker integration tests
-are marked SKIPPED; they were not faked. The exact verification commands are in §10.
-
-On a machine with Docker Desktop + WSL2, the implementation is designed to satisfy the
-requirements below; the PASS/FAIL status must be established by running the integration
-tests there.
+The Docker sandbox is fully implemented and **verified on 2026-11-08** with Docker
+Desktop 29.9.2. The 4 Docker integration tests pass, `demo-tools` executed the prime
+script in the sandbox with the expected stdout/exit code, and `docker ps -a` showed no
+leftover AgentForge containers. The only remaining skip is the Windows symlink test,
+which is unrelated to Docker.
 
 ## 2. Threat model
 
@@ -155,19 +153,23 @@ model's authority.
 
 ## 10. Verification
 
-### Current machine result
+### Verified result (2026-11-08)
 
 ```text
-docker: command not found
+Docker Desktop: 29.9.2
+docker info:    ok
+pytest -m docker -q
+4 passed, 183 deselected in 18.33s
+agentforge demo-tools
+exit 0; stdout: Primes up to 20: [2, 3, 5, 7, 11, 13, 17, 19]
+docker ps -a: no AgentForge containers
 ```
 
-Therefore:
+Full regression with Docker running: `186 passed, 2 skipped`. The 2 skips are the
+Windows symlink-privilege test and the Docker-missing failure-path test (skipped
+because Docker was available).
 
-- Docker integration tests: **SKIPPED**;
-- Docker end-to-end primes demo: **NOT VERIFIED**;
-- no Docker PASS is claimed.
-
-### On a Docker-enabled Windows machine
+### Verification commands
 
 ```powershell
 docker info
@@ -183,7 +185,7 @@ The Docker tests check:
 3. non-root UID (`os.getuid() == 65534`);
 4. network blocked under `--network none`;
 5. Agent A's file not readable in Agent B's container;
-6. configured memory/PID/network/read-only flags via `docker inspect`;
+6. configured memory/PID/network/read-only/cap-drop flags via `docker inspect`;
 7. end-to-end prime script execution and tool audit.
 
 ### Windows setup
@@ -193,11 +195,13 @@ The Docker tests check:
 3. Ensure `docker` is on `PATH`.
 4. Run the commands above.
 
-No system configuration was changed by this project to install or enable Docker.
+No system configuration was changed by this project except starting the already
+installed Docker Desktop for the verification run.
 
 ## 11. Known limitations
 
-- **Docker integration unverified here** — the largest open item.
+- **Windows symlink test skipped** — unrelated to Docker; the OS denied symlink
+  creation for the test user. Path components are still checked and rejected.
 - **Linux UID mapping** — the container user is 65534; a bind-mounted workspace may
   need host-side permissions/ownership adjustment on Linux. Windows Docker Desktop
   usually maps this transparently. This is documented, not silently changed.
@@ -219,17 +223,17 @@ No system configuration was changed by this project to install or enable Docker.
 
 | Requirement | Implementation | Verification |
 |---|---|---|
-| Per-agent container | ✅ | unit + Docker-gated tests |
-| Per-agent private workspace | ✅ | host isolation tests PASS; Docker isolation SKIPPED |
-| Non-root user | ✅ | config validator + Docker test SKIPPED |
-| CPU/memory/PID limits | ✅ | run-args tests PASS; `docker inspect` SKIPPED |
-| Wall-clock timeout | ✅ | run-args + exit-124 unit test PASS; live SKIPPED |
-| Network disabled by default | ✅ | run-args PASS; live SKIPPED |
+| Per-agent container | ✅ | Docker tests PASS |
+| Per-agent private workspace | ✅ | host + Docker isolation PASS |
+| Non-root user | ✅ | config validator + Docker test PASS |
+| CPU/memory/PID limits | ✅ | run-args + `docker inspect` PASS |
+| Wall-clock timeout | ✅ | run-args + exit-124 test PASS |
+| Network disabled by default | ✅ | run-args + live network-block test PASS |
 | No Docker socket / privileged mode | ✅ | run-args PASS |
-| Capabilities dropped + no-new-privileges | ✅ | run-args PASS |
-| Read-only root + tmpfs | ✅ | run-args PASS; live SKIPPED |
+| Capabilities dropped + no-new-privileges | ✅ | run-args + inspect PASS |
+| Read-only root + tmpfs | ✅ | run-args + inspect PASS |
 | No API keys in sandbox | ✅ | run-args/env tests PASS |
-| Lifecycle cleanup/restart | ✅ | unit tests PASS; live SKIPPED |
+| Lifecycle cleanup/restart | ✅ | unit + Docker tests PASS; no leftovers |
 | Artifact-only cross-agent sharing | ✅ | unit/integration tests PASS |
-| No host Python fallback | ✅ | dedicated test PASS |
-| Docker integration validation | ⏳ | **SKIPPED — Docker unavailable** |
+| No host Python fallback | ✅ | dedicated Docker-missing test PASS (skipped while Docker runs) |
+| Docker integration validation | ✅ | **4/4 PASS on 2026-11-08** |

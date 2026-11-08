@@ -15,9 +15,10 @@ sandbox isolation. The critical path is complete:
 - results are synthesised, independently reviewed, and finalised,
 - every message, task transition, LLM call, tool call, and metric is persisted.
 
-Phase 2 provides the Docker sandbox implementation, but live Docker verification is
-pending on this machine (Docker CLI unavailable). Full HITL, memory evolution, and a
-web UI remain future phases; interfaces and TODO markers are explicit.
+Phase 2 provides the Docker sandbox implementation and it is verified on this machine
+(Docker Desktop 29.9.2; 4/4 integration tests; real prime-script execution).
+Full HITL, memory evolution, and a web UI remain future phases; interfaces and TODO
+markers are explicit.
 
 ## 2. Layer diagram
 
@@ -371,6 +372,13 @@ agent as `[TOOL_RESULTS]`, marked untrusted, and the agent continues reasoning. 
 calls, LLM turns and task results are all separately persisted; tool-loop token and
 latency costs appear in workflow metrics.
 
+For synthesis, review and finalisation, the orchestrator builds `ToolEvidence` from
+the persisted `tool_calls` audit of the task's transitive dependency/delegation
+closure. It is injected as structured `[TOOL_EVIDENCE]` into the agent prompt. This is
+the authoritative source for stdout, stderr, exit code, success, duration and sandbox
+metadata; Mock reports and real LLM reports both consume it instead of scraping tool
+prose. A task also stores `tool_call_ids` in its metadata for traceability.
+
 `ToolSpec` declares input/output schemas, timeout, permissions, approval and
 untrusted-output flags. Default permissions are role-specific; `file_delete` and
 `git_push` always require approval. See `docs/TOOL_SYSTEM.md`.
@@ -406,10 +414,11 @@ at `/workspace`:
 the Docker sandbox. If Docker is missing, they return a structured
 `Docker sandbox unavailable` error. There is no host subprocess fallback.
 
-Docker integration is implemented but **not verified on the current machine** because
-no Docker CLI/daemon is available; those tests are SKIPPED and the end-to-end Docker
-demo is NOT VERIFIED. See `docs/SANDBOX_SECURITY.md` for the threat model, flags,
-verification commands and residual risks.
+Docker integration was verified on 2026-11-08 with Docker Desktop 29.9.2: 4/4 Docker
+tests passed, `demo-tools` executed the prime script and returned the recorded stdout
+and exit code, and `docker ps -a` showed no leftover containers. See
+`docs/SANDBOX_SECURITY.md` for the threat model, flags, verification commands and
+residual risks.
 
 ## 14. Search and Git tools
 

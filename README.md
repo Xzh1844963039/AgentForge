@@ -9,11 +9,11 @@ AgentForge is the final project for the HKUST NLP/Agent course. It is built incr
 | Phase | Status |
 |---|---|
 | Phase 1 — Runtime, messaging, DAG orchestration, persistence, CLI | ✅ complete |
-| Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ implemented; Docker integration **not verified** on this machine (Docker CLI unavailable) |
+| Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ complete; Docker integration verified (4/4) |
 | Phase 3 — Memory evolution | ⏳ next |
 | Phase 4 — Full human-in-the-loop | ⏳ planned |
 
-**Verified on 2026-11-07:** `175 passed, 5 skipped` in the full pytest suite, `76%` statement coverage, Ruff F/E9 clean. The 5 skips are 4 Docker-dependent tests and 1 Windows symlink-privilege test. Docker integration is **NOT VERIFIED**, not faked.
+**Verified on 2026-11-08:** `186 passed, 2 skipped` in the full pytest suite with Docker running, `78%` statement coverage, Ruff F/E9 clean. The 2 skips are one Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Docker integration: **4/4 passed**.
 
 Phase 2 highlights:
 
@@ -38,7 +38,7 @@ Phase 2 highlights:
 - Docker Desktop + WSL2 **only** for `python_execute`/`python_test` and `agentforge demo-tools`
 - PowerShell or Git Bash
 
-No API key is required for the deterministic demo and most tests. Docker is absent on the current development machine; the Docker parts report a prerequisite failure instead of silently executing on the host.
+No API key is required for the deterministic demo and most tests. Docker Desktop/WSL2 is required for Python execution and `demo-tools`; the verified environment used Docker 29.9.2 with the daemon running. If Docker is unavailable, the sandbox fails closed rather than executing on the host.
 
 ### 2. Install
 
@@ -105,17 +105,17 @@ pytest -q
 pytest -m docker -q        # only with Docker running
 ```
 
-Expected on the current machine:
+Expected on the current machine (Docker running):
 
 ```text
-175 passed, 5 skipped
+186 passed, 2 skipped
 ```
 
 Optional coverage:
 
 ```powershell
 pytest --cov=agentforge --cov-report=term -q
-# TOTAL: 4637 statements, 1100 missed, 76% coverage
+# TOTAL: 4835 statements, 1062 missed, 78% coverage
 ```
 
 ---
@@ -244,6 +244,11 @@ The `ToolExecutor` then:
 6. records the call in SQLite (`tool_calls`) and JSONL,
 7. returns stdout/structured output/error to the agent, which continues reasoning.
 
+Synthesis, review and finalization receive a structured `[TOOL_EVIDENCE]` block built
+from the persisted `tool_calls` audit (stdout, stderr, exit code, success, duration,
+script path and sandbox container). Reports quote those recorded facts instead of
+scraping model prose; Mock content remains deterministic but is evidence-grounded.
+
 Built-in tools:
 
 | Tool | Purpose |
@@ -295,7 +300,7 @@ See [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md) for the threat model, f
 │   ├── config/          centralized environment settings
 │   ├── runtime.py       dependency wiring and public API
 │   └── cli.py           CLI and REPL
-├── tests/               180 collected: unit, integration, protocol, CLI, Docker-gated
+├── tests/               188 collected: unit, integration, protocol, CLI, Docker-gated
 ├── examples/            mock demo, file-tool demo, real-provider example
 ├── docs/                architecture, plan, Phase 1/2 reports, tool & sandbox security
 ├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
@@ -325,11 +330,11 @@ Implemented:
 - Tool calls through a unified dispatcher with real results and iterative reasoning.
 - Private file tools, artifacts, Docker sandbox, Python execution (Docker-gated), search providers, local Git tools.
 - Approval gates for file deletion and git push (default: pending).
-- SQLite + JSONL observability, CLI, deterministic demos, 175 passing tests.
+- Structured tool evidence from the SQLite audit is propagated into synthesis, review and final report prompts.
+- SQLite + JSONL observability, CLI, deterministic demos, 186 passing tests.
 
 Not implemented / pending:
 
-- **Docker integration on this machine** — Docker CLI missing; tests skipped; `demo-tools` reports the prerequisite.
 - **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
 - **Real remote Git push** — only a temporary local bare remote was tested; default approval gate prevents pushes.
 - **Real LLM tool-calling** — no DeepSeek/HKGAI key; mock decisions are deterministic fixtures.
@@ -339,26 +344,27 @@ Not implemented / pending:
 
 ---
 
-## Docker verification commands
+## Docker verification
 
-On a machine with Docker Desktop + WSL2:
+Verified on 2026-11-08 with Docker Desktop 29.9.2:
 
 ```powershell
 docker info
 python -m pytest -m docker -q
+# 4 passed in 18.33s
+
 python -m agentforge demo-tools
+# exit 0; real stdout:
+# Primes up to 20: [2, 3, 5, 7, 11, 13, 17, 19]
+# Final report: Exit code: `0`; sandbox container recorded; stderr: (empty)
+
+docker ps -a
+# no AgentForge containers left
 ```
 
-Expected Docker tests: sandbox start/stop, non-root UID, network blocked, per-agent workspace isolation, configured CPU/memory/PID limits, and real prime-script execution.
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full suite is `186 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
 
-The current machine output:
-
-```text
-docker: command not found
-Docker CLI not found on PATH. Install Docker Desktop with WSL2...
-```
-
-This is recorded honestly in [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md); no Docker test was marked passed without Docker.
+The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 
 ---
 
