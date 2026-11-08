@@ -36,6 +36,11 @@ from agentforge.agents.factory import DEFAULT_PROFILES
 from agentforge.agents.registry import AgentNotFoundError
 from agentforge.config.settings import Settings
 from agentforge.llm.base import ProviderConfigurationError
+from agentforge.memory.models import (
+    MemoryType,
+    PromotionState,
+    VerificationLevel,
+)
 from agentforge.models.agent import AgentCard
 from agentforge.models.tool import ToolCallRecord
 from agentforge.models.workflow import Workflow, WorkflowStatus
@@ -104,6 +109,50 @@ def build_parser() -> argparse.ArgumentParser:
     tool_calls.add_argument("--task", help="filter by task id")
     tool_calls.add_argument("--agent", help="filter by agent id")
     tool_calls.add_argument("--limit", type=int, default=100)
+
+    memory = subparsers.add_parser("memory", help="Phase 3 memory tools")
+    _add_common_options(memory, suppress_defaults=True)
+    memory_sub = memory.add_subparsers(dest="memory_command")
+    memory_list = memory_sub.add_parser("list", help="list memories")
+    memory_list.add_argument("--agent")
+    memory_list.add_argument("--namespace")
+    memory_list.add_argument("--type", choices=[item.value for item in MemoryType])
+    memory_list.add_argument(
+        "--verification", choices=[item.value for item in VerificationLevel]
+    )
+    memory_list.add_argument("--limit", type=int, default=50)
+    memory_search = memory_sub.add_parser("search", help="semantic memory search")
+    memory_search.add_argument("query")
+    memory_search.add_argument("--agent")
+    memory_search.add_argument("--namespace")
+    memory_search.add_argument("--include-mock", action="store_true")
+    memory_search.add_argument("--include-unverified", action="store_true")
+    memory_search.add_argument("--limit", type=int, default=20)
+    memory_stats = memory_sub.add_parser("stats", help="memory statistics")
+    memory_stats.add_argument("--agent")
+    memory_candidates = memory_sub.add_parser(
+        "candidates", help="list procedural candidates"
+    )
+    memory_candidates.add_argument("--agent")
+    memory_candidates.add_argument(
+        "--status", choices=[item.value for item in PromotionState]
+    )
+    memory_candidates.add_argument("--limit", type=int, default=50)
+    memory_feedback = memory_sub.add_parser(
+        "feedback", help="show retrieval feedback"
+    )
+    memory_feedback.add_argument("--workflow")
+    memory_feedback.add_argument("--agent")
+    memory_feedback.add_argument("--limit", type=int, default=50)
+    memory_clear = memory_sub.add_parser("clear", help="clear memories (destructive)")
+    memory_clear.add_argument("--agent")
+    memory_clear.add_argument("--namespace")
+    memory_clear.add_argument("--confirm", action="store_true")
+    memory_experiment = memory_sub.add_parser(
+        "experiment", help="run the with/without-memory controlled experiment"
+    )
+    memory_experiment.add_argument("--learning-runs", type=int, default=2)
+    memory_experiment.add_argument("--experiment-dir")
 
     run = subparsers.add_parser("run", help="execute a goal")
     _add_common_options(run, suppress_defaults=True)
@@ -234,6 +283,8 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return await _cmd_tools(args)
     if command == "tool-calls":
         return _cmd_tool_calls(args)
+    if command == "memory":
+        return await _cmd_memory(args)
     if command == "tasks":
         return _cmd_tasks(args)
     if command == "messages":
@@ -248,6 +299,14 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_metrics(args)
     console.print(Text(f"unknown command {command!r}", style="red"))
     return 2
+
+
+async def _cmd_memory(args: argparse.Namespace) -> int:
+    from agentforge.cli_memory import run_memory_command
+
+    return await run_memory_command(
+        args, settings_factory=_make_settings, console=console
+    )
 
 
 # ---------------------------------------------------------------------- runtime cmds
