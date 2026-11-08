@@ -16,6 +16,7 @@ from agentforge.llm.mock import MockProvider
 from agentforge.memory.evolution_store import EvolutionMemoryStore
 from agentforge.memory.models import MemoryType, PromotionState, VerificationLevel
 from agentforge.runtime import AgentForgeRuntime
+from agentforge.tools.approval import AutoApprovalGate
 
 logger = logging.getLogger("agentforge.memory.experiment")
 
@@ -204,7 +205,13 @@ class MemoryExperimentRunner:
         )
         learning_provider = MemoryAwareFileProvider(bootstrap_path=LEARNING_PATH)
         learning_ids: list[str] = []
-        async with AgentForgeRuntime(common, provider=learning_provider) as runtime:
+        async with AgentForgeRuntime(
+            common,
+            provider=learning_provider,
+            approval_gate=AutoApprovalGate(
+                approved=True, reason="controlled memory experiment automation"
+            ),
+        ) as runtime:
             for _index in range(self.learning_runs):
                 workflow = await runtime.submit_goal(EXPERIMENT_GOAL)
                 learning_ids.append(workflow.workflow_id)
@@ -239,7 +246,13 @@ class MemoryExperimentRunner:
         )
         with_provider = MemoryAwareFileProvider()
         with_result: dict[str, Any] = {}
-        async with AgentForgeRuntime(with_settings, provider=with_provider) as runtime:
+        async with AgentForgeRuntime(
+            with_settings,
+            provider=with_provider,
+            approval_gate=AutoApprovalGate(
+                approved=True, reason="controlled memory experiment automation"
+            ),
+        ) as runtime:
             workflow = await runtime.submit_goal(EXPERIMENT_GOAL)
             runtime.memory_engine.process_workflow(workflow.workflow_id, learn=False)
             with_result = self._collect_run(runtime, workflow, with_provider)
@@ -252,7 +265,11 @@ class MemoryExperimentRunner:
         )
         control_provider = MemoryAwareFileProvider()
         async with AgentForgeRuntime(
-            control_settings, provider=control_provider
+            control_settings,
+            provider=control_provider,
+            approval_gate=AutoApprovalGate(
+                approved=True, reason="controlled memory experiment automation"
+            ),
         ) as runtime:
             workflow = await runtime.submit_goal(EXPERIMENT_GOAL)
             runtime.memory_engine.process_workflow(workflow.workflow_id, learn=False)

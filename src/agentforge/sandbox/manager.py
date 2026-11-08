@@ -44,10 +44,20 @@ class SandboxManager:
             for agent_id, sandbox in self._sandboxes.items()
         }
 
+    async def stop_agent(self, agent_id: str) -> None:
+        sandbox = self._sandboxes.get(agent_id)
+        if sandbox is not None and sandbox.status in {
+            SandboxStatus.RUNNING,
+            SandboxStatus.FAILED,
+        }:
+            try:
+                await sandbox.stop()
+            except Exception:
+                logger.exception("failed to stop sandbox for %s", agent_id)
+
+    async def stop_all(self) -> None:
+        for agent_id in list(self._sandboxes):
+            await self.stop_agent(agent_id)
+
     async def aclose(self) -> None:
-        for agent_id, sandbox in self._sandboxes.items():
-            if sandbox.status in {SandboxStatus.RUNNING, SandboxStatus.FAILED}:
-                try:
-                    await sandbox.stop()
-                except Exception:
-                    logger.exception("failed to stop sandbox for %s", agent_id)
+        await self.stop_all()

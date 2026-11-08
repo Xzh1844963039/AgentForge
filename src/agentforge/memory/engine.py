@@ -430,13 +430,32 @@ class MemoryEvolutionEngine:
         result: MemoryEvolutionResult,
     ) -> None:
         agent_id = task.assigned_agent or records[0].agent_id
-        if task.started_at is None or task.finished_at is None:
+        if workflow.status == WorkflowStatus.CANCELLED:
             return
+        execution_id = task.metadata.get("current_execution_id")
         events = self.memory.list_retrieval_events(
             agent_id=agent_id,
-            since=task.started_at,
-            until=task.finished_at,
+            workflow_id=workflow.workflow_id,
+            task_id=task.task_id,
+            execution_id=execution_id,
         )
+        if not events and not execution_id:
+            # Compatibility for pre-Phase-4 retrieval events that were recorded
+            # without task scope. Scoped events are never matched by time alone.
+            if task.started_at is None or task.finished_at is None:
+                return
+            legacy = self.memory.list_retrieval_events(
+                agent_id=agent_id,
+                since=task.started_at,
+                until=task.finished_at,
+            )
+            events = [
+                event
+                for event in legacy
+                if not event.workflow_id
+                and not event.task_id
+                and not event.execution_id
+            ]
         all_success = all(
             record.status == ToolResultStatus.SUCCESS for record in records
         )
@@ -462,6 +481,7 @@ class MemoryEvolutionEngine:
                     memory_id=memory_id,
                     workflow_id=workflow.workflow_id,
                     task_id=task.task_id,
+                    execution_id=execution_id,
                     agent_id=agent_id,
                     used=used,
                     success=all_success if used else False,

@@ -12,6 +12,7 @@ import json
 import re
 import threading
 from datetime import datetime
+from typing import Callable
 from typing import Any, Sequence
 
 from pydantic import BaseModel, Field, ValidationError
@@ -26,13 +27,14 @@ from agentforge.models.agent import AgentCard, AgentProfile, AgentRole
 from agentforge.models.common import utc_now
 from agentforge.models.message import Message
 from agentforge.models.task import AgentAction, AgentActionType, Task, TaskStatus
-from agentforge.models.tool import ToolEvidence
+from agentforge.models.tool import ApprovalToken, ToolEvidence
 from agentforge.orchestration.errors import AgentOutputError
 from agentforge.tools.base import (
     ToolExecutionContext,
     ToolRegistry,
     ToolResult,
 )
+from agentforge.tools.approval import ApprovalRequired, arguments_digest
 from agentforge.tools.executor import ToolExecutor
 
 ACTION_PROTOCOL = """Execution protocol (mandatory):
@@ -54,6 +56,14 @@ Delegate part of the work to other agents:
    {"description": "<delegated work>", "required_capabilities": ["<capability>"],
     "kind": "generic"}]},
  "reasoning": "<brief>"}
+
+Ask the human for clarification when a critical ambiguity blocks correct work:
+{"action": "clarify", "question": "<specific question>",
+ "clarification_context": "<what you know>",
+ "possible_interpretations": ["<option 1>", "<option 2>"]}
+
+Reject a delegated assignment you cannot handle:
+{"action": "reject_assignment", "reason": "<why this agent cannot accept it>"}
 
 Fail honestly when the task cannot be completed:
 {"action": "fail", "error": "<specific reason>", "content": "<partial result or explanation>"}
@@ -98,6 +108,28 @@ class AgentRunResult(BaseModel):
 class AgentChatResult(BaseModel):
     response: LLMResponse
     memory_hits: list[str] = Field(default_factory=list)
+
+
+class AgentSuspension(RuntimeError):
+    """Signals that the current task must pause for a human interaction."""
+
+    def __init__(
+        self,
+        kind: str,
+        *,
+        reason: str = "",
+        approval_request=None,
+        question: str | None = None,
+        clarification_context: str = "",
+        possible_interpretations: list[str] | None = None,
+    ) -> None:
+        super().__init__(reason or kind)
+        self.kind = kind
+        self.reason = reason
+        self.approval_request = approval_request
+        self.question = question
+        self.clarification_context = clarification_context
+        self.possible_interpretations = possible_interpretations or []
 
 
 class BaseAgent:
@@ -193,6 +225,10 @@ class BaseAgent:
             ):
                 self._active_task_id = None
 
+    def clear_active_task(self) -> None:
+        with self._lock:
+            self._active_task_id = None
+
     def task_state(self, task_id: str) -> TaskStatus | None:
         with self._lock:
             return self._task_states.get(task_id)
@@ -216,9 +252,19 @@ class BaseAgent:
         delegated_results: Sequence[tuple[str, str]] = (),
         tool_evidence: Sequence[ToolEvidence] = (),
         tool_context: ToolExecutionContext | None = None,
+        approval_tokens: Sequence[ApprovalToken] = (),
+        clarification_answer: str | None = None,
+        control_check: Callable[[], str | None] | None = None,
+        replay_mode: bool = False,
     ) -> AgentRunResult:
         """Run one task, dispatching real tools until the model finishes."""
-        memory_hits = self._recall_for(task.description)
+        execution_id = task.metadata.get("current_execution_id")
+        memory_hits = self._recall_for(
+            task.description,
+            workflow_id=task.workflow_id,
+            task_id=task.task_id,
+            execution_id=str(execution_id) if execution_id else None,
+        )
         messages = self._build_task_messages(
             task=task,
             goal=goal,
@@ -226,16 +272,24 @@ class BaseAgent:
             delegated_results=delegated_results,
             tool_evidence=tool_evidence,
             memory_hits=memory_hits,
+            clarification_answer=clarification_answer,
         )
+        if tool_context is not None:
+            tool_context.metadata["replay_mode"] = replay_mode
         kind = str(task.metadata.get("kind", "generic"))
         purpose = f"execute:{kind}:{self.role.value}"
         calls: list[LLMCall] = []
         tool_results: list[ToolResult] = []
         last_action: AgentAction | None = None
         last_warning: str | None = None
+        token_map = {
+            (token.tool_name, token.argument_digest): token
+            for token in approval_tokens
+        }
 
         max_turns = self.max_tool_calls + 3
         for _turn in range(max_turns):
+            self._raise_on_control(control_check)
             started = utc_now()
             response = await self.provider.complete(messages, purpose=purpose)
             finished = utc_now()
@@ -251,7 +305,17 @@ class BaseAgent:
             last_action = action
             last_warning = warning
 
+            if action.action == AgentActionType.CLARIFY:
+                raise AgentSuspension(
+                    "clarification",
+                    reason="agent requested human clarification",
+                    question=action.question,
+                    clarification_context=action.clarification_context,
+                    possible_interpretations=action.possible_interpretations,
+                )
+
             if action.action != AgentActionType.TOOL_CALL:
+                self._raise_on_control(control_check)
                 return AgentRunResult(
                     action=action,
                     response=response,
@@ -285,7 +349,22 @@ class BaseAgent:
             messages.append(ChatMessage.assistant(response.content))
             payloads: list[dict[str, Any]] = []
             for call in action.tool_calls:
-                result = await self.tool_executor.execute(call, tool_context)
+                self._raise_on_control(control_check)
+                token = token_map.get(
+                    (call.name, arguments_digest(call.arguments))
+                )
+                try:
+                    result = await self.tool_executor.execute(
+                        call,
+                        tool_context,
+                        approval_id=token.approval_id if token else None,
+                    )
+                except ApprovalRequired as exc:
+                    raise AgentSuspension(
+                        "approval",
+                        reason="tool requires human approval",
+                        approval_request=exc.request,
+                    ) from exc
                 tool_results.append(result)
                 payloads.append(
                     {
@@ -325,6 +404,22 @@ class BaseAgent:
             last_action=last_action,
             parse_warning=last_warning,
         )
+
+    @staticmethod
+    def _raise_on_control(
+        control_check: Callable[[], str | None] | None,
+    ) -> None:
+        if control_check is None:
+            return
+        state = control_check()
+        if state == "paused":
+            raise AgentSuspension(
+                "pause", reason="workflow pause requested by human"
+            )
+        if state == "cancelled":
+            raise AgentSuspension(
+                "cancel", reason="workflow cancelled by human"
+            )
 
     def _failed_tool_result(
         self,
@@ -412,6 +507,7 @@ class BaseAgent:
             metadata={
                 "task_id": task.task_id,
                 "workflow_id": task.workflow_id,
+                "execution_id": task.metadata.get("current_execution_id"),
                 "action": status,
             },
         )
@@ -426,9 +522,21 @@ class BaseAgent:
         )
 
     # ---------------------------------------------------------------- prompts
-    def _recall_for(self, query: str) -> list[str]:
+    def _recall_for(
+        self,
+        query: str,
+        *,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
+    ) -> list[str]:
         entries = self.memory.recall(
-            self.agent_id, query, limit=self.memory_recall_limit
+            self.agent_id,
+            query,
+            limit=self.memory_recall_limit,
+            workflow_id=workflow_id,
+            task_id=task_id,
+            execution_id=execution_id,
         )
         return [entry.content for entry in entries]
 
@@ -471,12 +579,18 @@ class BaseAgent:
         delegated_results: Sequence[tuple[str, str]],
         tool_evidence: Sequence[ToolEvidence],
         memory_hits: Sequence[str],
+        clarification_answer: str | None = None,
     ) -> list[ChatMessage]:
         dependency_text = _format_results(dependency_results)
         delegated_text = _format_results(delegated_results)
         evidence_text = _format_tool_evidence(tool_evidence)
         memory_text = (
             "\n".join(f"- {hit}" for hit in memory_hits) if memory_hits else "(none)"
+        )
+        clarification_block = (
+            f"[CLARIFICATION_ANSWER]\n{clarification_answer}\n\n"
+            if clarification_answer
+            else ""
         )
         user = (
             "[MODE]\nExecute one delegated task and return a single JSON action.\n\n"
@@ -492,6 +606,7 @@ class BaseAgent:
             "fields are the recorded facts.\n"
             f"[TOOL_EVIDENCE]\n{evidence_text}\n\n"
             f"[RELEVANT_MEMORY]\n{memory_text}\n\n"
+            f"{clarification_block}"
             "[CONSTRAINTS]\n"
             "Return only the JSON action object. Do not invent results. "
             "If you delegate, the platform will resume this task after the "

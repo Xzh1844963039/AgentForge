@@ -234,10 +234,14 @@ class WriteFileTool(_WorkspaceTool):
 
 class UpdateFileTool(_WorkspaceTool):
     name = "update_file"
-    description = "Replace or append content in an existing Markdown (.md) or text (.txt) file."
+    description = (
+        "Replace or append content in an existing Markdown (.md) or text (.txt) "
+        "file. Any in-place modification requires human approval."
+    )
     args_model = UpdateFileArgs
     output_model = UpdateFileOutput
     permissions = [ToolPermission.FILE_WRITE]
+    requires_approval = True
     timeout_seconds = 10
 
     async def run(

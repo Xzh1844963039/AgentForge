@@ -14,15 +14,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agentforge.agents.base import AgentRunResult
+from agentforge.agents.base import AgentRunResult, AgentSuspension
 from agentforge.agents.coordinator import PlanningAttempt
 from agentforge.agents.registry import AgentRegistry
 from agentforge.config.settings import Settings
+from agentforge.interaction.approval_service import ApprovalService
+from agentforge.interaction.clarification_service import ClarificationService
 from agentforge.evaluation.metrics import compute_workflow_metrics
 from agentforge.messaging.bus import MessageBus
 from agentforge.messaging.conversation import ConversationManager
 from agentforge.models.agent import AgentRole
-from agentforge.models.common import SYSTEM_SENDER, utc_now
+from agentforge.models.common import SYSTEM_SENDER, new_id, utc_now
 from agentforge.models.execution import AgentExecution, ExecutionStatus
 from agentforge.models.message import MessageType
 from agentforge.models.task import (
@@ -32,16 +34,20 @@ from agentforge.models.task import (
     Task,
     TaskStatus,
 )
-from agentforge.models.tool import ToolEvidence
-from agentforge.models.workflow import Workflow, WorkflowStatus
+from agentforge.models.clarification import ClarificationStatus
+from agentforge.models.tool import ApprovalStatus, ApprovalToken, ToolEvidence
+from agentforge.models.workflow import Workflow, WorkflowEvent, WorkflowStatus
 from agentforge.orchestration.assignment import (
     AssignmentCandidate,
     CapabilityAssigner,
 )
+from agentforge.orchestration.control import WorkflowControlService
 from agentforge.orchestration.errors import (
     OrchestrationError,
     PlanningError,
     TaskAssignmentError,
+    WorkflowCancelledRequested,
+    WorkflowPauseRequested,
 )
 from agentforge.orchestration.state_machine import transition_task
 from agentforge.persistence.database import SQLiteStore
@@ -87,6 +93,9 @@ class TaskOrchestrator:
         events: EventLogger,
         settings: Settings,
         tool_context_factory: Callable[[Task], ToolExecutionContext] | None = None,
+        approval_service: ApprovalService | None = None,
+        clarification_service: ClarificationService | None = None,
+        workflow_control: WorkflowControlService | None = None,
     ) -> None:
         self.agents = agents
         self.bus = bus
@@ -95,6 +104,13 @@ class TaskOrchestrator:
         self.events = events
         self.settings = settings
         self.tool_context_factory = tool_context_factory
+        self.approval_service = approval_service or ApprovalService(store, events)
+        self.clarification_service = clarification_service or ClarificationService(
+            store, events
+        )
+        self.workflow_control = workflow_control or WorkflowControlService(
+            store, events
+        )
         self.coordinator = agents.require_role(AgentRole.COORDINATOR)
         self.assigner = CapabilityAssigner(agents.cards())
         self._review_enabled = (
@@ -109,7 +125,7 @@ class TaskOrchestrator:
             conversation_id=conversation_id,
             status=WorkflowStatus.RUNNING,
             metadata={
-                "phase": 2,
+                "phase": 4,
                 "provider": self.coordinator.provider.name,
                 "review_enabled": self._review_enabled,
             },
@@ -145,6 +161,10 @@ class TaskOrchestrator:
             self._materialize_plan(planning.plan, planning.ordered_subtasks, ctx, root)
             self._post_plan(ctx, planning.ordered_subtasks)
             await self._run_graph(ctx)
+        except WorkflowPauseRequested as exc:
+            return self._pause_workflow(ctx, root, exc)
+        except WorkflowCancelledRequested as exc:
+            return self._cancel_workflow(ctx, root, exc.reason)
         except PlanningError as exc:
             self._record_planning_attempts(exc.attempts, ctx, root)
             self._fail_workflow(ctx, root, f"Planning failed: {exc}")
@@ -155,6 +175,174 @@ class TaskOrchestrator:
             )
 
         return self._finish_workflow(ctx, root)
+
+    async def resume_goal(self, workflow_id: str) -> Workflow:
+        """Resume a paused workflow from persisted tasks and human decisions."""
+        workflow = self.store.get_workflow(workflow_id)
+        if workflow is None:
+            raise OrchestrationError(f"unknown workflow {workflow_id!r}")
+        if workflow.status in {
+            WorkflowStatus.COMPLETED,
+            WorkflowStatus.FAILED,
+            WorkflowStatus.CANCELLED,
+        }:
+            return workflow
+
+        self.approval_service.expire_overdue()
+        self.clarification_service.expire_overdue()
+        tasks = self.store.list_tasks(workflow_id)
+        for task in tasks:
+            if task.status == TaskStatus.RUNNING and task.metadata.get("role") != "root":
+                # The process may have stopped mid-task. Replay from persisted
+                # audit; successful tool effects are served from the replay
+                # cache instead of being executed a second time.
+                task.metadata["replay_mode"] = True
+                task.metadata["recovered_from_running"] = True
+                transition_task(task, TaskStatus.PENDING)
+                self.store.save_task(task)
+        for task in tasks:
+            approval_id = task.metadata.get("pending_approval_id")
+            if approval_id:
+                approval = self.approval_service.get(approval_id)
+                if approval is None:
+                    raise OrchestrationError(
+                        f"pending approval {approval_id!r} is missing"
+                    )
+                if approval.status == ApprovalStatus.PENDING:
+                    raise OrchestrationError(
+                        f"approval {approval_id!r} is still pending; decide it first"
+                    )
+                if approval.status == ApprovalStatus.APPROVED and approval.consumed_at:
+                    task.metadata["replay_mode"] = True
+                elif approval.status in {
+                    ApprovalStatus.APPROVED,
+                    ApprovalStatus.REJECTED,
+                    ApprovalStatus.EXPIRED,
+                    ApprovalStatus.CANCELLED,
+                }:
+                    task.metadata["replay_mode"] = True
+                task.metadata["approval_decision"] = approval.status.value
+            clarification_id = task.metadata.get("clarification_id")
+            if clarification_id:
+                clarification = self.clarification_service.get(clarification_id)
+                if clarification is None:
+                    raise OrchestrationError(
+                        f"pending clarification {clarification_id!r} is missing"
+                    )
+                if clarification.status == ClarificationStatus.OPEN:
+                    raise OrchestrationError(
+                        f"clarification {clarification_id!r} is still open; "
+                        "answer it first"
+                    )
+                if clarification.status == ClarificationStatus.ANSWERED:
+                    task.metadata["clarification_answer"] = clarification.answer
+                    task.metadata["replay_mode"] = True
+                else:
+                    raise OrchestrationError(
+                        f"clarification {clarification_id!r} is "
+                        f"{clarification.status.value}; it cannot be resumed"
+                    )
+            self.store.save_task(task)
+
+        if workflow.status == WorkflowStatus.PAUSED:
+            self.workflow_control.resume(workflow_id)
+            workflow = self.store.get_workflow(workflow_id) or workflow
+        workflow.status = WorkflowStatus.RUNNING
+        workflow.error = None
+        workflow.finished_at = None
+        self.store.save_workflow(workflow)
+        self.events.event("workflow_resume_started", workflow_id=workflow_id)
+
+        tasks = self.store.list_tasks(workflow_id)
+        root = next(
+            (task for task in tasks if task.metadata.get("role") == "root"),
+            None,
+        )
+        if root is None:
+            raise OrchestrationError("workflow has no root task")
+        ctx = _RunContext(
+            workflow=workflow,
+            task_map={task.task_id: task for task in tasks},
+            final_task_id=workflow.metadata.get("final_task_id"),
+        )
+        try:
+            await self._run_graph(ctx)
+        except WorkflowPauseRequested as exc:
+            return self._pause_workflow(ctx, root, exc)
+        except WorkflowCancelledRequested as exc:
+            return self._cancel_workflow(ctx, root, exc.reason)
+        except Exception as exc:
+            logger.exception("workflow %s resume failed", workflow_id)
+            self._fail_workflow(ctx, root, f"{type(exc).__name__}: {exc}")
+        return self._finish_workflow(ctx, root)
+
+    def pause_workflow(
+        self, workflow_id: str, *, reason: str = "human_pause"
+    ) -> Workflow:
+        """Request a running workflow to pause at its next control point."""
+        self.workflow_control.pause(workflow_id, reason=reason)
+        workflow = self.store.get_workflow(workflow_id)
+        if workflow is None:
+            raise OrchestrationError(f"unknown workflow {workflow_id!r}")
+        return workflow
+
+    def cancel_workflow(
+        self, workflow_id: str, *, reason: str = "human_cancel"
+    ) -> Workflow:
+        """Cancel a workflow and its unfinished tasks, approvals and questions."""
+        workflow = self.store.get_workflow(workflow_id)
+        if workflow is None:
+            raise OrchestrationError(f"unknown workflow {workflow_id!r}")
+        if workflow.status == WorkflowStatus.CANCELLED:
+            return workflow
+        if workflow.status in {WorkflowStatus.COMPLETED, WorkflowStatus.FAILED}:
+            raise OrchestrationError(
+                f"cannot cancel workflow in status {workflow.status.value}"
+            )
+        self.workflow_control.cancel(workflow_id, reason=reason)
+        workflow = self.store.get_workflow(workflow_id) or workflow
+        workflow.error = reason
+        workflow.finished_at = utc_now()
+        self.approval_service.cancel_for_workflow(workflow_id)
+        self.clarification_service.cancel_for_workflow(workflow_id)
+        tasks = self.store.list_tasks(workflow_id)
+        for task in tasks:
+            if task.is_terminal:
+                continue
+            try:
+                transition_task(task, TaskStatus.CANCELLED, error=reason)
+                self.store.save_task(task)
+                self._sync_agent_task_state(task)
+            except Exception:
+                logger.exception("failed to cancel task %s", task.task_id)
+        ctx = _RunContext(
+            workflow=workflow,
+            task_map={task.task_id: task for task in tasks},
+            final_task_id=workflow.metadata.get("final_task_id"),
+        )
+        self._save_metrics(ctx)
+        self.store.save_workflow(workflow)
+        self._notify_group(
+            ctx,
+            "system",
+            MessageType.ERROR,
+            f"Workflow cancelled: {reason}",
+        )
+        return workflow
+
+    def get_workflow_status(self, workflow_id: str) -> WorkflowStatus | None:
+        workflow = self.store.get_workflow(workflow_id)
+        return workflow.status if workflow is not None else None
+
+    def _control_state(self, workflow_id: str) -> str | None:
+        current = self.store.get_workflow(workflow_id)
+        if current is None:
+            return "cancelled"
+        if current.status == WorkflowStatus.PAUSED:
+            return "paused"
+        if current.status == WorkflowStatus.CANCELLED:
+            return "cancelled"
+        return None
 
     # ------------------------------------------------------------------ planning
     def _record_planning_attempts(
@@ -349,6 +537,15 @@ class TaskOrchestrator:
     # ------------------------------------------------------------------ execution
     async def _run_graph(self, ctx: _RunContext) -> None:
         while True:
+            control = self._control_state(ctx.workflow.workflow_id)
+            if control == "paused":
+                raise WorkflowPauseRequested(
+                    "workflow pause requested by human"
+                )
+            if control == "cancelled":
+                raise WorkflowCancelledRequested(
+                    "workflow cancelled by human"
+                )
             progressed = False
 
             for task in self._snapshot_work_tasks(ctx):
@@ -446,6 +643,10 @@ class TaskOrchestrator:
         transition_task(task, TaskStatus.RUNNING)
         agent.begin_task(task)
         task.metadata["resumed"] = resumed
+        task.metadata["current_execution_id"] = new_id("exec")
+        execution_ids = list(task.metadata.get("execution_ids") or [])
+        execution_ids.append(task.metadata["current_execution_id"])
+        task.metadata["execution_ids"] = execution_ids
         self.store.save_task(task)
         self.events.event(
             "task_started",
@@ -466,6 +667,9 @@ class TaskOrchestrator:
         purpose = f"execute:{kind}:{agent.role.value}"
         started_at = utc_now()
         request_message_id: str | None = None
+        approval_tokens = self._approval_tokens_for_task(task)
+        clarification_answer = task.metadata.get("clarification_answer")
+        replay_mode = bool(task.metadata.get("replay_mode"))
 
         try:
             request = self._send_task_request(ctx, task)
@@ -487,7 +691,18 @@ class TaskOrchestrator:
                     if self.tool_context_factory is not None
                     else None
                 ),
+                approval_tokens=approval_tokens,
+                clarification_answer=clarification_answer,
+                control_check=lambda: self._control_state(
+                    ctx.workflow.workflow_id
+                ),
+                replay_mode=replay_mode,
             )
+        except AgentSuspension as exc:
+            self._handle_agent_suspension(
+                ctx, task, agent, exc, purpose, started_at
+            )
+            return
         except Exception as exc:
             finished_at = utc_now()
             self._save_execution(
@@ -527,12 +742,17 @@ class TaskOrchestrator:
             finished_at,
         )
 
+        if result.action.action == AgentActionType.REJECT_ASSIGNMENT:
+            self._handle_rejected_assignment(ctx, task, agent, result)
+            return
+
         try:
             agent.remember_task_outcome(task, result)
         except Exception:  # memory must not invalidate completed work
             logger.exception("failed to record memory for task %s", task.task_id)
 
         if result.action.action == AgentActionType.COMPLETE:
+            self._clear_hitl_metadata(task)
             task.metadata.pop("blocked_by", None)
             transition_task(
                 task,
@@ -566,6 +786,7 @@ class TaskOrchestrator:
             return
 
         if result.action.action == AgentActionType.FAIL:
+            self._clear_hitl_metadata(task)
             error = result.action.error or result.action.content or "agent failed"
             transition_task(task, TaskStatus.FAILED, error=error)
             self.store.save_task(task)
@@ -596,6 +817,354 @@ class TaskOrchestrator:
         # Delegation
         await self._handle_delegation(ctx, task, agent.agent_id, result)
         agent.sync_task_state(task)
+
+    def _approval_tokens_for_task(self, task: Task) -> list[ApprovalToken]:
+        approval_id = task.metadata.get("pending_approval_id")
+        if not approval_id:
+            return []
+        request = self.approval_service.get(str(approval_id))
+        if request is None:
+            return []
+        return [
+            ApprovalToken(
+                approval_id=request.approval_id,
+                tool_name=request.tool_name or request.action,
+                argument_digest=request.argument_digest,
+            )
+        ]
+
+    def _clear_hitl_metadata(self, task: Task) -> None:
+        for key in (
+            "pending_approval_id",
+            "pending_tool_name",
+            "pending_argument_digest",
+            "clarification_id",
+            "clarification_answer",
+            "replay_mode",
+        ):
+            if key in task.metadata:
+                task.metadata[f"last_{key}"] = task.metadata.pop(key)
+
+    def _handle_agent_suspension(
+        self,
+        ctx: _RunContext,
+        task: Task,
+        agent,
+        exc: AgentSuspension,
+        purpose: str,
+        started_at,
+    ) -> None:
+        finished_at = utc_now()
+        self._save_execution(
+            ctx,
+            task,
+            agent.agent_id,
+            purpose,
+            started_at,
+            finished_at,
+            ExecutionStatus.COMPLETED,
+            error=None,
+            response=None,
+            provider_name=agent.provider.name,
+            model_name=agent.provider.model,
+            extra_metadata={"suspended": exc.kind, "reason": exc.reason},
+        )
+        if exc.kind == "approval":
+            request = exc.approval_request
+            if request is None:
+                raise OrchestrationError(
+                    "approval suspension did not include an approval request"
+                )
+            task.metadata["pending_approval_id"] = request.approval_id
+            task.metadata["pending_tool_name"] = request.tool_name
+            task.metadata["pending_argument_digest"] = request.argument_digest
+            task.metadata["replay_mode"] = True
+            task.metadata["approval_decision"] = "pending"
+            transition_task(task, TaskStatus.PENDING)
+            self.store.save_task(task)
+            agent.clear_active_task()
+            agent.sync_task_state(task)
+            self.workflow_control.pause(
+                ctx.workflow.workflow_id, reason="approval_pending"
+            )
+            ctx.workflow.status = WorkflowStatus.PAUSED
+            self.store.save_workflow(ctx.workflow)
+            self._notify_group(
+                ctx,
+                "system",
+                MessageType.SYSTEM,
+                "Workflow paused for approval. "
+                f"Approval `{request.approval_id}`: {request.summary}\n"
+                f"Use `agentforge approvals show {request.approval_id}`, then "
+                "approve/reject and `agentforge workflows resume "
+                f"{ctx.workflow.workflow_id}`.",
+                task_id=task.task_id,
+            )
+            self._workflow_event(
+                ctx.workflow.workflow_id,
+                "approval_pending",
+                approval_id=request.approval_id,
+                task_id=task.task_id,
+            )
+            raise WorkflowPauseRequested(
+                "approval_pending",
+                task_id=task.task_id,
+                approval_id=request.approval_id,
+            )
+        if exc.kind == "clarification":
+            request = self.clarification_service.create(
+                workflow_id=ctx.workflow.workflow_id,
+                task_id=task.task_id,
+                agent_id=agent.agent_id,
+                question=exc.question or "Clarification required",
+                context=exc.clarification_context,
+                possible_interpretations=exc.possible_interpretations,
+            )
+            task.metadata["clarification_id"] = request.clarification_id
+            task.metadata["replay_mode"] = True
+            transition_task(task, TaskStatus.PENDING)
+            self.store.save_task(task)
+            agent.clear_active_task()
+            agent.sync_task_state(task)
+            self.workflow_control.pause(
+                ctx.workflow.workflow_id, reason="clarification_pending"
+            )
+            ctx.workflow.status = WorkflowStatus.PAUSED
+            self.store.save_workflow(ctx.workflow)
+            self._notify_group(
+                ctx,
+                "system",
+                MessageType.SYSTEM,
+                f"Workflow paused for clarification `{request.clarification_id}`: "
+                f"{request.question}\nUse `agentforge clarification answer "
+                f"{request.clarification_id} \"<answer>\"`, then resume.",
+                task_id=task.task_id,
+            )
+            self._workflow_event(
+                ctx.workflow.workflow_id,
+                "clarification_pending",
+                clarification_id=request.clarification_id,
+                task_id=task.task_id,
+            )
+            raise WorkflowPauseRequested(
+                "clarification_pending",
+                task_id=task.task_id,
+                clarification_id=request.clarification_id,
+            )
+        if exc.kind == "pause":
+            transition_task(task, TaskStatus.PENDING)
+            self.store.save_task(task)
+            agent.clear_active_task()
+            agent.sync_task_state(task)
+            self.workflow_control.pause(
+                ctx.workflow.workflow_id, reason="human_pause"
+            )
+            ctx.workflow.status = WorkflowStatus.PAUSED
+            self.store.save_workflow(ctx.workflow)
+            self._workflow_event(
+                ctx.workflow.workflow_id, "task_paused", task_id=task.task_id
+            )
+            raise WorkflowPauseRequested("human_pause", task_id=task.task_id)
+        if exc.kind == "cancel":
+            raise WorkflowCancelledRequested(
+                "workflow cancelled by human", task_id=task.task_id
+            )
+        raise OrchestrationError(f"unknown suspension kind {exc.kind!r}")
+
+    def _pause_workflow(
+        self, ctx: _RunContext, root: Task, exc: WorkflowPauseRequested
+    ) -> Workflow:
+        workflow = ctx.workflow
+        stored = self.store.get_workflow(workflow.workflow_id)
+        already_paused = stored is not None and stored.status == WorkflowStatus.PAUSED
+        workflow.status = WorkflowStatus.PAUSED
+        workflow.error = None
+        workflow.finished_at = None
+        self._save_metrics(ctx, utc_now())
+        self.store.save_workflow(workflow)
+        if not already_paused:
+            self._workflow_event(
+                workflow.workflow_id,
+                "workflow_paused",
+                reason=exc.reason,
+                approval_id=exc.approval_id,
+                clarification_id=exc.clarification_id,
+            )
+            self.events.event(
+                "workflow_paused",
+                workflow_id=workflow.workflow_id,
+                reason=exc.reason,
+                approval_id=exc.approval_id,
+                clarification_id=exc.clarification_id,
+            )
+        return workflow
+
+    def _cancel_workflow(
+        self, ctx: _RunContext, root: Task, reason: str
+    ) -> Workflow:
+        workflow = ctx.workflow
+        stored = self.store.get_workflow(workflow.workflow_id)
+        already_cancelled = (
+            stored is not None and stored.status == WorkflowStatus.CANCELLED
+        )
+        workflow.status = WorkflowStatus.CANCELLED
+        workflow.error = reason
+        workflow.finished_at = utc_now()
+        self.approval_service.cancel_for_workflow(workflow.workflow_id)
+        self.clarification_service.cancel_for_workflow(workflow.workflow_id)
+        if not root.is_terminal:
+            transition_task(root, TaskStatus.CANCELLED, error=reason)
+            self.store.save_task(root)
+        for task in self._work_tasks(ctx):
+            if not task.is_terminal:
+                try:
+                    transition_task(task, TaskStatus.CANCELLED, error=reason)
+                    self.store.save_task(task)
+                    self._sync_agent_task_state(task)
+                except Exception:
+                    logger.exception("failed to cancel task %s", task.task_id)
+        self._save_metrics(ctx)
+        self.store.save_workflow(workflow)
+        if not already_cancelled:
+            self._workflow_event(
+                workflow.workflow_id, "workflow_cancelled", reason=reason
+            )
+            self.events.event(
+                "workflow_cancelled",
+                workflow_id=workflow.workflow_id,
+                reason=reason,
+            )
+        self._notify_group(
+            ctx,
+            "system",
+            MessageType.ERROR,
+            f"Workflow cancelled: {reason}",
+        )
+        return workflow
+
+    def _workflow_event(
+        self, workflow_id: str, event_type: str, **metadata
+    ) -> None:
+        self.workflow_control.repo.append_event(
+            WorkflowEvent(
+                workflow_id=workflow_id,
+                event_type=event_type,
+                metadata=metadata,
+            )
+        )
+
+    def _handle_rejected_assignment(
+        self,
+        ctx: _RunContext,
+        task: Task,
+        agent,
+        result: AgentRunResult,
+    ) -> None:
+        reason = (
+            result.action.reason
+            or result.action.content
+            or "agent rejected the delegated assignment"
+        )
+        if task.metadata.get("origin") != "delegation":
+            self._fail_task_without_execution(
+                ctx, task, f"assignment rejected: {reason}"
+            )
+            return
+        count = int(task.metadata.get("reassignment_count", 0))
+        if count >= self.settings.max_reassignments:
+            self._fail_task_without_execution(
+                ctx,
+                task,
+                f"reassignment limit reached after {count} reassignment(s): {reason}",
+            )
+            return
+        candidates = [
+            candidate
+            for candidate in self.assigner.candidates(task.required_capabilities)
+            if candidate.score >= 1.0
+            and candidate.card.agent_id != task.assigned_agent
+        ]
+        if not candidates:
+            self._fail_task_without_execution(
+                ctx,
+                task,
+                f"no alternative agent can cover {task.required_capabilities}: {reason}",
+            )
+            return
+        replacement_card = candidates[0].card
+        parent = ctx.task_map.get(task.parent_task_id or "")
+        if parent is None:
+            self._fail_task_without_execution(
+                ctx, task, f"cannot reassign a task without a parent: {reason}"
+            )
+            return
+
+        replacement = Task(
+            workflow_id=task.workflow_id,
+            parent_task_id=task.parent_task_id,
+            description=task.description,
+            required_capabilities=list(task.required_capabilities),
+            assigned_agent=replacement_card.agent_id,
+            dependencies=[],
+            depth=task.depth,
+            metadata={
+                **task.metadata,
+                "origin": "delegation",
+                "reassigned_from": task.task_id,
+                "reassignment_count": count + 1,
+                "reassignment_reason": reason,
+            },
+        )
+        self.store.save_task(replacement)
+        ctx.task_map[replacement.task_id] = replacement
+
+        blocked = list(parent.metadata.get("blocked_by") or [])
+        blocked = [
+            replacement.task_id if child_id == task.task_id else child_id
+            for child_id in blocked
+        ]
+        delegated = list(parent.metadata.get("delegated_task_ids") or [])
+        delegated = [
+            replacement.task_id if child_id == task.task_id else child_id
+            for child_id in delegated
+        ]
+        parent.metadata["blocked_by"] = list(dict.fromkeys(blocked))
+        parent.metadata["delegated_task_ids"] = list(dict.fromkeys(delegated))
+        self.store.save_task(parent)
+
+        transition_task(
+            task,
+            TaskStatus.CANCELLED,
+            error=f"reassigned to {replacement_card.agent_id}: {reason}",
+        )
+        task.metadata["reassigned_to"] = replacement_card.agent_id
+        self.store.save_task(task)
+        agent.sync_task_state(task)
+        self.events.event(
+            "task_reassigned",
+            workflow_id=task.workflow_id,
+            task_id=task.task_id,
+            replacement_task_id=replacement.task_id,
+            from_agent=task.assigned_agent,
+            to_agent=replacement_card.agent_id,
+            reason=reason,
+        )
+        self._workflow_event(
+            ctx.workflow.workflow_id,
+            "task_reassigned",
+            task_id=task.task_id,
+            replacement_task_id=replacement.task_id,
+            from_agent=task.assigned_agent,
+            to_agent=replacement_card.agent_id,
+        )
+        self._notify_group(
+            ctx,
+            "system",
+            MessageType.DELEGATION,
+            f"Task rejected by `{task.assigned_agent}`: {reason}. "
+            f"Reassigned to `{replacement_card.agent_id}`.",
+            task_id=replacement.task_id,
+        )
 
     async def _handle_delegation(
         self,
@@ -1022,8 +1591,39 @@ class TaskOrchestrator:
                 except Exception:
                     logger.exception("failed to abort task %s", task.task_id)
 
+    def _save_metrics(self, ctx: _RunContext, finished_at=None) -> None:
+        workflow = ctx.workflow
+        end = finished_at or workflow.finished_at or utc_now()
+        workflow.metrics = compute_workflow_metrics(
+            self.store.list_tasks(workflow.workflow_id),
+            self.store.list_executions(workflow.workflow_id),
+            started_at=workflow.created_at,
+            finished_at=end,
+            tool_calls=self.store.list_tool_calls(workflow.workflow_id),
+            approvals=self.approval_service.repo.list_approvals(
+                workflow.workflow_id
+            ),
+            clarifications=self.clarification_service.repo.list_clarifications(
+                workflow.workflow_id
+            ),
+            workflow_events=self.workflow_control.repo.list_events(
+                workflow.workflow_id
+            ),
+        )
+
     def _finish_workflow(self, ctx: _RunContext, root: Task) -> Workflow:
         workflow = ctx.workflow
+        current = self.store.get_workflow(workflow.workflow_id)
+        if current is not None and current.status in {
+            WorkflowStatus.PAUSED,
+            WorkflowStatus.CANCELLED,
+        }:
+            return current
+        if workflow.status in {
+            WorkflowStatus.PAUSED,
+            WorkflowStatus.CANCELLED,
+        }:
+            return workflow
         final_task = (
             ctx.task_map.get(ctx.final_task_id) if ctx.final_task_id else None
         )
@@ -1063,15 +1663,7 @@ class TaskOrchestrator:
                         logger.exception("failed to abort task %s", task.task_id)
 
         workflow.finished_at = utc_now()
-        tasks = self.store.list_tasks(workflow.workflow_id)
-        executions = self.store.list_executions(workflow.workflow_id)
-        workflow.metrics = compute_workflow_metrics(
-            tasks,
-            executions,
-            started_at=workflow.created_at,
-            finished_at=workflow.finished_at,
-            tool_calls=self.store.list_tool_calls(workflow.workflow_id),
-        )
+        self._save_metrics(ctx, workflow.finished_at)
         self.store.save_workflow(workflow)
         self.events.event(
             "workflow_completed" if workflow.status == WorkflowStatus.COMPLETED else "workflow_failed",
@@ -1111,6 +1703,9 @@ class TaskOrchestrator:
         if workflow.status == WorkflowStatus.COMPLETED:
             content = workflow.final_result or "(no final result)"
             message_type = MessageType.TASK_RESULT
+        elif workflow.status == WorkflowStatus.CANCELLED:
+            content = f"Workflow cancelled: {workflow.error or 'cancelled'}"
+            message_type = MessageType.ERROR
         else:
             content = f"Workflow failed: {workflow.error or 'unknown error'}"
             message_type = MessageType.ERROR

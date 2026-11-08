@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     max_plan_subtasks: int = Field(default=8, ge=1, le=30)
     max_delegation_depth: int = Field(default=3, ge=0, le=10)
     max_delegation_rounds: int = Field(default=2, ge=0, le=10)
+    max_reassignments: int = Field(default=2, ge=0, le=10)
     max_execution_steps: int = Field(default=30, ge=1, le=200)
     max_tasks_per_workflow: int = Field(default=60, ge=1, le=500)
     enable_final_review: bool = True
@@ -75,6 +76,11 @@ class Settings(BaseSettings):
     artifacts_root: Path | None = None
     max_file_bytes: int = Field(default=262_144, ge=1024, le=5_000_000)
     max_workspace_files: int = Field(default=200, ge=1, le=2000)
+
+    # --- Human-in-the-loop -----------------------------------------------------
+    approval_ttl_seconds: int = Field(default=3600, ge=10)
+    clarification_ttl_seconds: int = Field(default=86400, ge=10)
+    workflow_event_limit: int = Field(default=1000, ge=1)
 
     # --- Docker sandbox --------------------------------------------------------
     sandbox_image: str = "python:3.11-slim"

@@ -92,10 +92,15 @@ CREATE TABLE IF NOT EXISTS retrieval_events (
     namespace TEXT,
     query TEXT NOT NULL,
     memory_ids_json TEXT NOT NULL,
+    workflow_id TEXT,
+    task_id TEXT,
+    execution_id TEXT,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_retrieval_agent_time
     ON retrieval_events(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_retrieval_scope
+    ON retrieval_events(workflow_id, task_id, execution_id);
 
 CREATE TABLE IF NOT EXISTS memory_feedback (
     feedback_id TEXT PRIMARY KEY,
@@ -103,6 +108,7 @@ CREATE TABLE IF NOT EXISTS memory_feedback (
     memory_id TEXT NOT NULL,
     workflow_id TEXT,
     task_id TEXT,
+    execution_id TEXT,
     agent_id TEXT NOT NULL,
     used INTEGER NOT NULL,
     success INTEGER NOT NULL,
@@ -113,6 +119,8 @@ CREATE TABLE IF NOT EXISTS memory_feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_workflow
     ON memory_feedback(workflow_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_scope
+    ON memory_feedback(workflow_id, task_id, execution_id);
 """
 
 
@@ -164,10 +172,24 @@ class EvolutionMemoryStore(MemoryStore):
         self._conn.execute("PRAGMA synchronous=NORMAL")
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
+            self._migrate_scope_columns()
             self._conn.execute(
-                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '1') "
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '2') "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
             )
+
+    def _migrate_scope_columns(self) -> None:
+        """Add Phase 4 task-scope columns to pre-existing memory databases."""
+        for table in ("retrieval_events", "memory_feedback"):
+            existing = {
+                str(row["name"])
+                for row in self._conn.execute(f"PRAGMA table_info({table})")
+            }
+            for column in ("workflow_id", "task_id", "execution_id"):
+                if column not in existing:
+                    self._conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {column} TEXT"
+                    )
 
     # ------------------------------------------------------------------ lifecycle
     def close(self) -> None:
@@ -232,6 +254,9 @@ class EvolutionMemoryStore(MemoryStore):
         *,
         namespace: str | None = None,
         limit: int = 5,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
     ) -> list[MemoryEntry]:
         if not self.retrieval_enabled or not self.retrieval_config.enabled:
             return []
@@ -268,6 +293,9 @@ class EvolutionMemoryStore(MemoryStore):
             query=query,
             memory_ids=ids,
             namespace=namespace,
+            workflow_id=workflow_id,
+            task_id=task_id,
+            execution_id=execution_id,
             created_at=now,
         )
         return entries
@@ -550,6 +578,9 @@ class EvolutionMemoryStore(MemoryStore):
         query: str,
         memory_ids: list[str],
         namespace: str | None = None,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
         created_at: datetime | None = None,
     ) -> RetrievalEvent:
         event = RetrievalEvent(
@@ -557,19 +588,26 @@ class EvolutionMemoryStore(MemoryStore):
             namespace=namespace,
             query=query,
             memory_ids=list(memory_ids),
+            workflow_id=workflow_id,
+            task_id=task_id,
+            execution_id=execution_id,
             created_at=created_at or self.clock(),
         )
         with self._lock, self._conn:
             self._conn.execute(
                 "INSERT INTO retrieval_events("
-                "retrieval_id, agent_id, namespace, query, memory_ids_json, created_at"
-                ") VALUES (?, ?, ?, ?, ?, ?)",
+                "retrieval_id, agent_id, namespace, query, memory_ids_json, "
+                "workflow_id, task_id, execution_id, created_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     event.retrieval_id,
                     event.agent_id,
                     event.namespace,
                     event.query,
                     _json(event.memory_ids),
+                    event.workflow_id,
+                    event.task_id,
+                    event.execution_id,
                     event.created_at.isoformat(),
                 ),
             )
@@ -579,6 +617,9 @@ class EvolutionMemoryStore(MemoryStore):
         self,
         *,
         agent_id: str | None = None,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 500,
@@ -588,6 +629,15 @@ class EvolutionMemoryStore(MemoryStore):
         if agent_id is not None:
             query += " AND agent_id = ?"
             params.append(agent_id)
+        if workflow_id is not None:
+            query += " AND workflow_id = ?"
+            params.append(workflow_id)
+        if task_id is not None:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        if execution_id is not None:
+            query += " AND execution_id = ?"
+            params.append(execution_id)
         if since is not None:
             query += " AND created_at >= ?"
             params.append(since.isoformat())
@@ -606,14 +656,16 @@ class EvolutionMemoryStore(MemoryStore):
                 self._conn.execute(
                     "INSERT INTO memory_feedback("
                     "feedback_id, retrieval_id, memory_id, workflow_id, task_id, "
-                    "agent_id, used, success, confidence_delta, evidence_json, created_at"
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "execution_id, agent_id, used, success, confidence_delta, "
+                    "evidence_json, created_at"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         feedback.feedback_id,
                         feedback.retrieval_id,
                         feedback.memory_id,
                         feedback.workflow_id,
                         feedback.task_id,
+                        feedback.execution_id,
                         feedback.agent_id,
                         int(feedback.used),
                         int(feedback.success),
@@ -630,6 +682,8 @@ class EvolutionMemoryStore(MemoryStore):
         self,
         *,
         workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
         agent_id: str | None = None,
         limit: int = 200,
     ) -> list[MemoryFeedback]:
@@ -638,6 +692,12 @@ class EvolutionMemoryStore(MemoryStore):
         if workflow_id is not None:
             query += " AND workflow_id = ?"
             params.append(workflow_id)
+        if task_id is not None:
+            query += " AND task_id = ?"
+            params.append(task_id)
+        if execution_id is not None:
+            query += " AND execution_id = ?"
+            params.append(execution_id)
         if agent_id is not None:
             query += " AND agent_id = ?"
             params.append(agent_id)
@@ -1013,6 +1073,9 @@ def _row_to_retrieval(row: sqlite3.Row) -> RetrievalEvent:
         namespace=row["namespace"],
         query=row["query"],
         memory_ids=_loads(row["memory_ids_json"], []),
+        workflow_id=row["workflow_id"],
+        task_id=row["task_id"],
+        execution_id=row["execution_id"],
         created_at=datetime.fromisoformat(row["created_at"]),
     )
 
@@ -1024,6 +1087,7 @@ def _row_to_feedback(row: sqlite3.Row) -> MemoryFeedback:
         memory_id=row["memory_id"],
         workflow_id=row["workflow_id"],
         task_id=row["task_id"],
+        execution_id=row["execution_id"],
         agent_id=row["agent_id"],
         used=bool(row["used"]),
         success=bool(row["success"]),

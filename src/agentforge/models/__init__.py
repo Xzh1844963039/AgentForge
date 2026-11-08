@@ -1,6 +1,7 @@
 """Domain models for AgentForge."""
 
 from agentforge.models.agent import AgentCard, AgentProfile, AgentRole
+from agentforge.models.clarification import ClarificationRequest, ClarificationStatus
 from agentforge.models.common import HUMAN_SENDER, SYSTEM_SENDER, new_id, utc_now
 from agentforge.models.execution import AgentExecution, ExecutionStatus
 from agentforge.models.message import Conversation, ConversationType, Message, MessageType
@@ -19,14 +20,21 @@ from agentforge.models.tool import (
     ApprovalDecision,
     ApprovalRequest,
     ApprovalStatus,
+    ApprovalToken,
     ArtifactRecord,
     PermissionDecision,
+    RiskLevel,
     ToolCall,
     ToolCallRecord,
     ToolEvidence,
     ToolResultStatus,
 )
-from agentforge.models.workflow import Workflow, WorkflowMetrics, WorkflowStatus
+from agentforge.models.workflow import (
+    Workflow,
+    WorkflowEvent,
+    WorkflowMetrics,
+    WorkflowStatus,
+)
 
 __all__ = [
     "AgentAction",
@@ -35,9 +43,12 @@ __all__ = [
     "AgentExecution",
     "AgentProfile",
     "AgentRole",
+    "ApprovalToken",
     "ApprovalDecision",
     "ApprovalRequest",
     "ApprovalStatus",
+    "ClarificationRequest",
+    "ClarificationStatus",
     "ArtifactRecord",
     "Conversation",
     "ConversationType",
@@ -49,6 +60,7 @@ __all__ = [
     "Message",
     "MessageType",
     "PermissionDecision",
+    "RiskLevel",
     "SubtaskSpec",
     "SYSTEM_SENDER",
     "Task",
@@ -59,6 +71,7 @@ __all__ = [
     "ToolEvidence",
     "ToolResultStatus",
     "Workflow",
+    "WorkflowEvent",
     "WorkflowMetrics",
     "WorkflowStatus",
     "new_id",

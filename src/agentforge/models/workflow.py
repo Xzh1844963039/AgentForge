@@ -14,8 +14,11 @@ from agentforge.models.common import new_id, utc_now
 class WorkflowStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"
+    BLOCKED = "blocked"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class WorkflowMetrics(BaseModel):
@@ -34,6 +37,31 @@ class WorkflowMetrics(BaseModel):
     tool_calls: int = 0
     tool_failures: int = 0
     tool_seconds: float = 0.0
+    approval_requests: int = 0
+    approval_approved: int = 0
+    approval_rejected: int = 0
+    approval_expired: int = 0
+    approval_rate: float = 0.0
+    approval_rejection_rate: float = 0.0
+    average_approval_wait_seconds: float = 0.0
+    clarifications: int = 0
+    clarification_answered: int = 0
+    average_clarification_wait_seconds: float = 0.0
+    workflow_pauses: int = 0
+    workflow_resumes: int = 0
+    workflow_cancellations: int = 0
+    delegation_tasks: int = 0
+    delegation_completed: int = 0
+    delegation_success_rate: float = 0.0
+    reassignments: int = 0
+
+
+class WorkflowEvent(BaseModel):
+    event_id: str = Field(default_factory=lambda: new_id("wfevent"))
+    workflow_id: str
+    event_type: str
+    created_at: datetime = Field(default_factory=utc_now)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class Workflow(BaseModel):

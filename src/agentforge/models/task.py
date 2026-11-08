@@ -18,10 +18,11 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     BLOCKED = "blocked"
+    CANCELLED = "cancelled"
 
 
 TERMINAL_TASK_STATUSES = frozenset(
-    {TaskStatus.COMPLETED, TaskStatus.FAILED}
+    {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
 )
 
 
@@ -112,6 +113,8 @@ class AgentActionType(str, Enum):
     COMPLETE = "complete"
     DELEGATE = "delegate"
     TOOL_CALL = "tool_call"
+    CLARIFY = "clarify"
+    REJECT_ASSIGNMENT = "reject_assignment"
     FAIL = "fail"
 
 
@@ -122,6 +125,10 @@ class AgentAction(BaseModel):
     content: str = ""
     delegation: DelegationRequest | None = None
     tool_calls: list[ToolCall] = Field(default_factory=list)
+    question: str | None = None
+    clarification_context: str = ""
+    possible_interpretations: list[str] = Field(default_factory=list)
+    reason: str | None = None
     error: str | None = None
     reasoning: str | None = None
 
@@ -134,6 +141,14 @@ class AgentAction(BaseModel):
                 raise ValueError("delegate actions require at least one subtask")
         if self.action == AgentActionType.TOOL_CALL and not self.tool_calls:
             raise ValueError("tool_call actions require at least one tool call")
+        if self.action == AgentActionType.CLARIFY and not (
+            self.question and self.question.strip()
+        ):
+            raise ValueError("clarify actions require a question")
+        if self.action == AgentActionType.REJECT_ASSIGNMENT and not (
+            (self.reason and self.reason.strip()) or self.content.strip()
+        ):
+            raise ValueError("reject_assignment actions require a reason")
         if self.action == AgentActionType.FAIL and not (
             (self.error and self.error.strip()) or self.content.strip()
         ):

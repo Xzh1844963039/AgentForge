@@ -59,8 +59,15 @@ class MemoryStore(ABC):
         *,
         namespace: str | None = None,
         limit: int = 5,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
     ) -> list[MemoryEntry]:
-        """Return the most relevant memories for a query."""
+        """Return the most relevant memories for a query.
+
+        Retrieval implementations that audit usage should persist the task scope
+        so feedback can be attributed to the exact workflow/task/execution.
+        """
 
     @abstractmethod
     def recent(

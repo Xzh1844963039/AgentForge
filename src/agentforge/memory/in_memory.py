@@ -42,6 +42,9 @@ class InMemoryMemoryStore(MemoryStore):
         *,
         namespace: str | None = None,
         limit: int = 5,
+        workflow_id: str | None = None,
+        task_id: str | None = None,
+        execution_id: str | None = None,
     ) -> list[MemoryEntry]:
         entries = self._scoped(agent_id, namespace)
         return rank_memories(query, entries, limit)

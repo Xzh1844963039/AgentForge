@@ -107,6 +107,9 @@ class RetrievalEvent(BaseModel):
     namespace: str | None = None
     query: str
     memory_ids: list[str] = Field(default_factory=list)
+    workflow_id: str | None = None
+    task_id: str | None = None
+    execution_id: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -116,6 +119,7 @@ class MemoryFeedback(BaseModel):
     memory_id: str
     workflow_id: str | None = None
     task_id: str | None = None
+    execution_id: str | None = None
     agent_id: str
     used: bool = False
     success: bool = False

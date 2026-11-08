@@ -18,14 +18,28 @@ class InvalidTaskTransition(OrchestrationError):
 
 ALLOWED_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.PENDING: frozenset(
-        {TaskStatus.RUNNING, TaskStatus.BLOCKED, TaskStatus.FAILED}
+        {
+            TaskStatus.RUNNING,
+            TaskStatus.BLOCKED,
+            TaskStatus.FAILED,
+            TaskStatus.CANCELLED,
+        }
     ),
     TaskStatus.RUNNING: frozenset(
-        {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.BLOCKED}
+        {
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.BLOCKED,
+            TaskStatus.PENDING,
+            TaskStatus.CANCELLED,
+        }
     ),
-    TaskStatus.BLOCKED: frozenset({TaskStatus.RUNNING, TaskStatus.FAILED}),
+    TaskStatus.BLOCKED: frozenset(
+        {TaskStatus.RUNNING, TaskStatus.FAILED, TaskStatus.CANCELLED}
+    ),
     TaskStatus.COMPLETED: frozenset(),
     TaskStatus.FAILED: frozenset(),
+    TaskStatus.CANCELLED: frozenset(),
 }
 
 
@@ -49,7 +63,11 @@ def transition_task(
             task.started_at = now
         task.finished_at = None
         task.error = None
-    elif new_status in {TaskStatus.COMPLETED, TaskStatus.FAILED}:
+    elif new_status in {
+        TaskStatus.COMPLETED,
+        TaskStatus.FAILED,
+        TaskStatus.CANCELLED,
+    }:
         task.finished_at = now
     elif new_status == TaskStatus.BLOCKED:
         task.finished_at = None

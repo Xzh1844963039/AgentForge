@@ -18,6 +18,7 @@ from agentforge.config import Settings
 from agentforge.llm.base import LLMResponse, TokenUsage
 from agentforge.llm.mock import MockProvider
 from agentforge.runtime import AgentForgeRuntime
+from agentforge.tools.approval import AutoApprovalGate
 
 
 class FileToolProvider(MockProvider):
@@ -118,7 +119,13 @@ async def main() -> int:
         data_dir=Path("data/examples/tool_file_demo"),
         log_level="WARNING",
     )
-    async with AgentForgeRuntime(settings, provider=FileToolProvider()) as runtime:
+    async with AgentForgeRuntime(
+        settings,
+        provider=FileToolProvider(),
+        approval_gate=AutoApprovalGate(
+            approved=True, reason="non-interactive file-tool demonstration"
+        ),
+    ) as runtime:
         workflow = await runtime.submit_goal("Create and verify a Markdown note")
         print(f"Workflow: {workflow.workflow_id} -> {workflow.status.value}")
         print(f"Error: {workflow.error}")

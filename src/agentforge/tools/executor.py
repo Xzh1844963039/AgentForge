@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -16,13 +16,14 @@ from agentforge.models.tool import (
     ApprovalRequest,
     ApprovalStatus,
     PermissionDecision,
+    RiskLevel,
     ToolCall,
     ToolCallRecord,
     ToolResultStatus,
 )
 from agentforge.persistence.database import SQLiteStore
 from agentforge.persistence.events import EventLogger
-from agentforge.tools.approval import ApprovalGate
+from agentforge.tools.approval import ApprovalGate, ApprovalRequired, arguments_digest
 from agentforge.tools.base import (
     ToolExecutionContext,
     ToolRegistry,
@@ -45,6 +46,8 @@ class ToolExecutor:
         approval_gate: ApprovalGate,
         *,
         max_output_bytes: int = 65_536,
+        raise_on_pending: bool = False,
+        approval_ttl_seconds: int = 3600,
     ) -> None:
         self.registry = registry
         self.store = store
@@ -52,15 +55,20 @@ class ToolExecutor:
         self.policy = policy
         self.approval_gate = approval_gate
         self.max_output_bytes = max(1024, max_output_bytes)
+        self.raise_on_pending = raise_on_pending
+        self.approval_ttl_seconds = max(1, approval_ttl_seconds)
 
     async def execute(
-        self, tool_call: ToolCall, context: ToolExecutionContext
+        self,
+        tool_call: ToolCall,
+        context: ToolExecutionContext,
+        *,
+        approval_id: str | None = None,
     ) -> ToolResult:
         started_at = utc_now()
         started_perf = time.perf_counter()
         permission_decision = PermissionDecision.DENIED
         approval_status = ApprovalStatus.NOT_REQUIRED
-        approval_id: str | None = None
         tool_spec = None
 
         try:
@@ -126,79 +134,175 @@ class ToolExecutor:
             )
             return result
 
-        if evaluation.requires_approval:
-            request = ApprovalRequest(
-                agent_id=context.agent_id,
-                action=tool_spec.name,
-                summary=(
-                    f"Agent {context.agent_id} requests approval to run "
-                    f"{tool_spec.name}"
-                ),
-                workflow_id=context.workflow_id,
-                task_id=context.task_id,
-                tool_name=tool_spec.name,
-                details={"arguments": tool_call.arguments},
+        digest = arguments_digest(tool_call.arguments)
+        call_requires_approval = evaluation.requires_approval or (
+            self._call_requires_approval(tool_spec.name, tool_call.arguments)
+        )
+        replayed = self._find_replay(context, tool_call, digest)
+        if replayed is not None:
+            result = ToolResult.ok(
+                dict(replayed.output),
+                metadata={
+                    **replayed.metadata,
+                    "replayed": True,
+                    "replayed_from": replayed.tool_call_id,
+                },
             )
-            approval_id = request.approval_id
-            decision = await self.approval_gate.request_approval(request)
-            approval_status = decision.status
+            self._record(
+                tool_call,
+                context,
+                result,
+                started_at,
+                started_perf,
+                permission_decision=permission_decision,
+                approval_status=ApprovalStatus.NOT_REQUIRED,
+                approval_id=replayed.approval_id,
+                permissions=list(evaluation.permissions),
+                metadata={"reason": "replayed_successful_effect"},
+            )
             self.events.event(
-                "tool_approval",
-                tool_call_id=tool_call.call_id,
+                "tool_effect_replayed",
                 workflow_id=context.workflow_id,
                 task_id=context.task_id,
                 agent_id=context.agent_id,
                 tool_name=tool_spec.name,
-                approval_id=request.approval_id,
-                status=decision.status.value,
-                reason=decision.reason,
+                replayed_from=replayed.tool_call_id,
             )
+            return result
 
-            if decision.status == ApprovalStatus.PENDING:
-                result = ToolResult.fail(
-                    "tool execution is pending human approval",
-                    status=ToolResultStatus.PENDING_APPROVAL,
-                    metadata={
-                        "approval_id": request.approval_id,
-                        "approval_status": decision.status.value,
-                    },
+        if call_requires_approval:
+            if approval_id is not None:
+                decision = await self.approval_gate.consume_approval(
+                    approval_id,
+                    tool_name=tool_spec.name,
+                    argument_digest=digest,
+                    workflow_id=context.workflow_id,
+                    task_id=context.task_id,
+                    agent_id=context.agent_id,
                 )
-                self._record(
-                    tool_call,
-                    context,
-                    result,
-                    started_at,
-                    started_perf,
-                    permission_decision=permission_decision,
-                    approval_status=approval_status,
+                approval_status = decision.status
+                self.events.event(
+                    "tool_approval_consumed",
+                    tool_call_id=tool_call.call_id,
+                    workflow_id=context.workflow_id,
+                    task_id=context.task_id,
+                    agent_id=context.agent_id,
+                    tool_name=tool_spec.name,
                     approval_id=approval_id,
-                    permissions=list(evaluation.permissions),
-                    metadata={"reason": "approval_pending"},
+                    status=decision.status.value,
+                    reason=decision.reason,
                 )
-                return result
+                if decision.status != ApprovalStatus.APPROVED:
+                    result = ToolResult.fail(
+                        f"tool execution was not approved: {decision.reason}",
+                        status=ToolResultStatus.DENIED,
+                        metadata={
+                            "approval_id": approval_id,
+                            "approval_status": decision.status.value,
+                        },
+                    )
+                    self._record(
+                        tool_call,
+                        context,
+                        result,
+                        started_at,
+                        started_perf,
+                        permission_decision=permission_decision,
+                        approval_status=approval_status,
+                        approval_id=approval_id,
+                        permissions=list(evaluation.permissions),
+                        metadata={"reason": "approval_not_available"},
+                    )
+                    return result
+            else:
+                arguments_preview = json.dumps(
+                    tool_call.arguments, ensure_ascii=False, default=str
+                )[:2000]
+                request = ApprovalRequest(
+                    agent_id=context.agent_id,
+                    action=tool_spec.name,
+                    summary=(
+                        f"Agent {context.agent_id} requests approval to run "
+                        f"{tool_spec.name} in task {context.task_id}. "
+                        f"Arguments: {arguments_preview}"
+                    ),
+                    workflow_id=context.workflow_id,
+                    task_id=context.task_id,
+                    tool_name=tool_spec.name,
+                    arguments=dict(tool_call.arguments),
+                    argument_digest=digest,
+                    risk_level=self._risk_level(
+                        tool_spec, tool_call.arguments
+                    ),
+                    reason=(
+                        f"Tool {tool_spec.name} has side effects and requires "
+                        "explicit human approval."
+                    ),
+                    details={"arguments": tool_call.arguments},
+                    expires_at=utc_now()
+                    + timedelta(seconds=self.approval_ttl_seconds),
+                )
+                approval_id = request.approval_id
+                decision = await self.approval_gate.request_approval(request)
+                approval_status = decision.status
+                self.events.event(
+                    "tool_approval",
+                    tool_call_id=tool_call.call_id,
+                    workflow_id=context.workflow_id,
+                    task_id=context.task_id,
+                    agent_id=context.agent_id,
+                    tool_name=tool_spec.name,
+                    approval_id=request.approval_id,
+                    status=decision.status.value,
+                    reason=decision.reason,
+                )
+                if decision.status == ApprovalStatus.PENDING:
+                    result = ToolResult.fail(
+                        "tool execution is pending human approval",
+                        status=ToolResultStatus.PENDING_APPROVAL,
+                        metadata={
+                            "approval_id": request.approval_id,
+                            "approval_status": decision.status.value,
+                        },
+                    )
+                    self._record(
+                        tool_call,
+                        context,
+                        result,
+                        started_at,
+                        started_perf,
+                        permission_decision=permission_decision,
+                        approval_status=approval_status,
+                        approval_id=approval_id,
+                        permissions=list(evaluation.permissions),
+                        metadata={"reason": "approval_pending"},
+                    )
+                    if self.raise_on_pending:
+                        raise ApprovalRequired(request, tool_call)
+                    return result
 
-            if decision.status != ApprovalStatus.APPROVED:
-                result = ToolResult.fail(
-                    f"tool execution was not approved: {decision.reason}",
-                    status=ToolResultStatus.DENIED,
-                    metadata={
-                        "approval_id": request.approval_id,
-                        "approval_status": decision.status.value,
-                    },
-                )
-                self._record(
-                    tool_call,
-                    context,
-                    result,
-                    started_at,
-                    started_perf,
-                    permission_decision=permission_decision,
-                    approval_status=approval_status,
-                    approval_id=approval_id,
-                    permissions=list(evaluation.permissions),
-                    metadata={"reason": "approval_denied"},
-                )
-                return result
+                if decision.status != ApprovalStatus.APPROVED:
+                    result = ToolResult.fail(
+                        f"tool execution was not approved: {decision.reason}",
+                        status=ToolResultStatus.DENIED,
+                        metadata={
+                            "approval_id": request.approval_id,
+                            "approval_status": decision.status.value,
+                        },
+                    )
+                    self._record(
+                        tool_call,
+                        context,
+                        result,
+                        started_at,
+                        started_perf,
+                        permission_decision=permission_decision,
+                        approval_status=approval_status,
+                        approval_id=approval_id,
+                        permissions=list(evaluation.permissions),
+                        metadata={"reason": "approval_denied"},
+                    )
+                    return result
 
         try:
             result = await asyncio.wait_for(
@@ -262,6 +366,46 @@ class ToolExecutor:
     ) -> list[ToolResult]:
         """Execute calls sequentially; stop is the agent's decision, not ours."""
         return [await self.execute(call, context) for call in tool_calls]
+
+    @staticmethod
+    def _call_requires_approval(name: str, arguments: dict[str, Any]) -> bool:
+        # write_file only overwrites when explicitly requested; gate that intent.
+        return name == "write_file" and bool(arguments.get("overwrite"))
+
+    @staticmethod
+    def _risk_level(tool_spec, arguments: dict[str, Any] | None = None) -> RiskLevel:
+        permission_values = {permission.value for permission in tool_spec.permissions}
+        if {"file_delete", "git_push"} & permission_values:
+            return RiskLevel.HIGH
+        if tool_spec.name in {"delete_file", "update_file"}:
+            return RiskLevel.HIGH
+        if tool_spec.name == "write_file" and (arguments or {}).get("overwrite"):
+            return RiskLevel.HIGH
+        if tool_spec.requires_approval:
+            return RiskLevel.MEDIUM
+        return RiskLevel.LOW
+
+    def _find_replay(
+        self,
+        context: ToolExecutionContext,
+        tool_call: ToolCall,
+        digest: str,
+    ):
+        if not context.metadata.get("replay_mode"):
+            return None
+        if not context.workflow_id or not context.task_id:
+            return None
+        for record in self.store.list_tool_calls(
+            context.workflow_id, task_id=context.task_id
+        ):
+            if record.tool_name != tool_call.name:
+                continue
+            if record.status != ToolResultStatus.SUCCESS:
+                continue
+            if arguments_digest(record.arguments) != digest:
+                continue
+            return record
+        return None
 
     def _record(
         self,

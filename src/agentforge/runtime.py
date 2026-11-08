@@ -14,6 +14,8 @@ from agentforge.agents.base import BaseAgent
 from agentforge.agents.factory import build_default_agents
 from agentforge.agents.registry import AgentRegistry
 from agentforge.config.settings import Settings
+from agentforge.interaction.approval_service import ApprovalService
+from agentforge.interaction.clarification_service import ClarificationService
 from agentforge.llm.base import BaseLLMProvider, LLMResponse
 from agentforge.llm.factory import build_llm_provider
 from agentforge.logging_config import setup_logging
@@ -24,6 +26,7 @@ from agentforge.memory.models import MemoryRetrievalConfig
 from agentforge.messaging.bus import MessageBus
 from agentforge.messaging.conversation import ConversationManager
 from agentforge.models.agent import AgentCard
+from agentforge.models.clarification import ClarificationRequest
 from agentforge.models.common import HUMAN_SENDER, utc_now
 from agentforge.models.execution import AgentExecution, ExecutionStatus
 from agentforge.models.message import (
@@ -32,14 +35,15 @@ from agentforge.models.message import (
     MessageType,
 )
 from agentforge.models.task import Task
-from agentforge.models.tool import ToolCallRecord
-from agentforge.models.workflow import Workflow
+from agentforge.models.tool import ApprovalRequest, ToolCallRecord
+from agentforge.models.workflow import Workflow, WorkflowEvent, WorkflowStatus
+from agentforge.orchestration.control import WorkflowControlService
 from agentforge.orchestration.orchestrator import TaskOrchestrator
 from agentforge.persistence.database import SQLiteStore
 from agentforge.persistence.events import EventLogger
 from agentforge.sandbox.base import SandboxConfig
 from agentforge.sandbox.manager import SandboxManager
-from agentforge.tools.approval import ApprovalGate, PendingApprovalGate
+from agentforge.tools.approval import ApprovalGate
 from agentforge.tools.artifact_store import ArtifactStore
 from agentforge.tools.base import (
     ToolExecutionContext,
@@ -135,7 +139,22 @@ class AgentForgeRuntime:
         self.tools: ToolRegistry = built_tools.registry
         self.search_provider = built_tools.search_provider
         self.tool_policy = ToolPermissionPolicy()
-        self.approval_gate = approval_gate or PendingApprovalGate()
+        self.approval_service = (
+            approval_gate
+            if isinstance(approval_gate, ApprovalService)
+            else ApprovalService(
+                self.store,
+                self.events,
+                ttl_seconds=self.settings.approval_ttl_seconds,
+            )
+        )
+        self.approval_gate = approval_gate or self.approval_service
+        self.clarification_service = ClarificationService(
+            self.store,
+            self.events,
+            ttl_seconds=self.settings.clarification_ttl_seconds,
+        )
+        self.workflow_control = WorkflowControlService(self.store, self.events)
         self.tool_executor = (
             ToolExecutor(
                 self.tools,
@@ -144,6 +163,8 @@ class AgentForgeRuntime:
                 self.tool_policy,
                 self.approval_gate,
                 max_output_bytes=self.settings.tool_output_limit_bytes,
+                raise_on_pending=isinstance(self.approval_gate, ApprovalService),
+                approval_ttl_seconds=self.settings.approval_ttl_seconds,
             )
             if self.settings.tools_enabled
             else None
@@ -178,6 +199,9 @@ class AgentForgeRuntime:
             events=self.events,
             settings=self.settings,
             tool_context_factory=self._tool_context_for_task,
+            approval_service=self.approval_service,
+            clarification_service=self.clarification_service,
+            workflow_control=self.workflow_control,
         )
         self.events.event(
             "runtime_initialized",
@@ -257,7 +281,10 @@ class AgentForgeRuntime:
             task_id=task.task_id,
             workspace=self.workspaces.workspace_for(task.assigned_agent),
             sandbox=sandbox,
-            metadata={"sandbox_manager": "docker"},
+            metadata={
+                "sandbox_manager": "docker",
+                "execution_id": task.metadata.get("current_execution_id"),
+            },
         )
 
     # ------------------------------------------------------------------ workflows
@@ -296,27 +323,123 @@ class AgentForgeRuntime:
         workflow = await self.orchestrator.run_goal(goal, conversation.conversation_id)
         workflow.metadata["published_message_id"] = published.message_id
         self.store.save_workflow(workflow)
-        if self.settings.memory_evolution_enabled:
-            try:
-                evolution = self.memory_engine.process_workflow(
-                    workflow.workflow_id, learn=True
-                )
-                workflow.metadata["memory_evolution"] = evolution.model_dump(mode="json")
-                self.store.save_workflow(workflow)
-                self.events.event(
-                    "memory_evolution",
-                    workflow_id=workflow.workflow_id,
-                    created=len(evolution.created_memory_ids),
-                    promoted=len(evolution.promoted_memory_ids),
-                    candidates=len(evolution.candidate_ids),
-                    feedback=len(evolution.feedback_ids),
-                    skipped_reason=evolution.skipped_reason,
-                )
-            except Exception:
-                logger.exception(
-                    "memory evolution failed for workflow %s", workflow.workflow_id
-                )
+        self._evolve_memory(workflow)
         return workflow
+
+    def _evolve_memory(self, workflow: Workflow) -> None:
+        if (
+            not self.settings.memory_evolution_enabled
+            or workflow.status != WorkflowStatus.COMPLETED
+        ):
+            return
+        try:
+            evolution = self.memory_engine.process_workflow(
+                workflow.workflow_id, learn=True
+            )
+            workflow.metadata["memory_evolution"] = evolution.model_dump(mode="json")
+            self.store.save_workflow(workflow)
+            self.events.event(
+                "memory_evolution",
+                workflow_id=workflow.workflow_id,
+                created=len(evolution.created_memory_ids),
+                promoted=len(evolution.promoted_memory_ids),
+                candidates=len(evolution.candidate_ids),
+                feedback=len(evolution.feedback_ids),
+                skipped_reason=evolution.skipped_reason,
+            )
+        except Exception:
+            logger.exception(
+                "memory evolution failed for workflow %s", workflow.workflow_id
+            )
+
+    def pause_workflow(
+        self, workflow_id: str, *, reason: str = "human_pause"
+    ) -> Workflow:
+        return self.orchestrator.pause_workflow(workflow_id, reason=reason)
+
+    async def resume_workflow(self, workflow_id: str) -> Workflow:
+        workflow = await self.orchestrator.resume_goal(workflow_id)
+        self._evolve_memory(workflow)
+        return workflow
+
+    async def cancel_workflow(
+        self, workflow_id: str, *, reason: str = "human_cancel"
+    ) -> Workflow:
+        tasks = self.store.list_tasks(workflow_id)
+        agent_ids = {
+            task.assigned_agent for task in tasks if task.assigned_agent
+        }
+        workflow = self.orchestrator.cancel_workflow(workflow_id, reason=reason)
+        for agent_id in sorted(agent_ids):
+            await self.sandboxes.stop_agent(agent_id)
+        return workflow
+
+    def list_workflow_events(self, workflow_id: str) -> list[WorkflowEvent]:
+        return self.workflow_control.repo.list_events(workflow_id)
+
+    # ------------------------------------------------------------------ approvals
+    def list_approvals(
+        self, workflow_id: str | None = None
+    ) -> list[ApprovalRequest]:
+        return self.approval_service.list(workflow_id)
+
+    def get_approval(self, approval_id: str) -> ApprovalRequest | None:
+        return self.approval_service.get(approval_id)
+
+    def approve_tool(
+        self,
+        approval_id: str,
+        *,
+        decided_by: str = HUMAN_SENDER,
+        comment: str = "",
+    ) -> ApprovalRequest:
+        return self.approval_service.approve(
+            approval_id, decided_by=decided_by, comment=comment
+        )
+
+    def reject_tool(
+        self,
+        approval_id: str,
+        *,
+        decided_by: str = HUMAN_SENDER,
+        comment: str = "",
+    ) -> ApprovalRequest:
+        return self.approval_service.reject(
+            approval_id, decided_by=decided_by, comment=comment
+        )
+
+    # -------------------------------------------------------------- clarifications
+    def list_clarifications(
+        self, workflow_id: str | None = None
+    ) -> list[ClarificationRequest]:
+        return self.clarification_service.list(workflow_id)
+
+    def get_clarification(
+        self, clarification_id: str
+    ) -> ClarificationRequest | None:
+        return self.clarification_service.get(clarification_id)
+
+    def answer_clarification(
+        self, clarification_id: str, answer: str
+    ) -> ClarificationRequest:
+        request = self.clarification_service.answer(
+            clarification_id, answer, answered_by=HUMAN_SENDER
+        )
+        workflow = self.store.get_workflow(request.workflow_id)
+        if workflow is not None:
+            self.bus.send(
+                sender=HUMAN_SENDER,
+                conversation_id=workflow.conversation_id,
+                message_type=MessageType.GROUP,
+                content=answer,
+                metadata={
+                    "kind": "clarification_answer",
+                    "clarification_id": clarification_id,
+                    "workflow_id": request.workflow_id,
+                    "human_published": True,
+                },
+            )
+        return request
 
     # ----------------------------------------------------------------- private chat
     async def chat_with_agent(self, agent_id: str, text: str) -> ChatExchange:

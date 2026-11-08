@@ -25,3 +25,30 @@ class TaskAssignmentError(OrchestrationError):
 
 class AgentOutputError(OrchestrationError):
     """An agent returned output that cannot be interpreted as an action."""
+
+
+class WorkflowPauseRequested(OrchestrationError):
+    """Raised internally when a workflow must pause for HITL."""
+
+    def __init__(
+        self,
+        reason: str,
+        *,
+        task_id: str | None = None,
+        approval_id: str | None = None,
+        clarification_id: str | None = None,
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.task_id = task_id
+        self.approval_id = approval_id
+        self.clarification_id = clarification_id
+
+
+class WorkflowCancelledRequested(OrchestrationError):
+    """Raised internally when a workflow is cancelled."""
+
+    def __init__(self, reason: str, *, task_id: str | None = None) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.task_id = task_id

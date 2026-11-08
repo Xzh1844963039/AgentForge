@@ -14,6 +14,9 @@ Commands:
   agentforge history               Workflow history
   agentforge result <workflow_id>  Print a final report
   agentforge metrics [workflow_id] Print workflow metrics
+  agentforge approvals ...        List/show/approve/reject human approvals
+  agentforge clarification ...    List/show/answer clarification requests
+  agentforge workflows ...        List/show/pause/resume/cancel workflows
 """
 
 from __future__ import annotations
@@ -42,7 +45,8 @@ from agentforge.memory.models import (
     VerificationLevel,
 )
 from agentforge.models.agent import AgentCard
-from agentforge.models.tool import ToolCallRecord
+from agentforge.models.clarification import ClarificationStatus
+from agentforge.models.tool import ApprovalStatus, ToolCallRecord
 from agentforge.models.workflow import Workflow, WorkflowStatus
 from agentforge.persistence.database import SQLiteStore
 from agentforge.runtime import AgentForgeRuntime
@@ -76,6 +80,8 @@ STATUS_STYLES = {
     "timeout": "bold red",
     "denied": "bold magenta",
     "pending_approval": "bold yellow",
+    "paused": "bold yellow",
+    "cancelled": "bold red",
 }
 
 
@@ -83,7 +89,7 @@ STATUS_STYLES = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentforge",
-        description="AgentForge: multi-agent collaborative platform (Phase 2)",
+        description="AgentForge: multi-agent collaborative platform (Phase 4)",
     )
     parser.add_argument("--version", action="version", version=__version__)
     _add_common_options(parser)
@@ -198,6 +204,66 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(metrics, suppress_defaults=True)
     metrics.add_argument("workflow_id", nargs="?")
 
+    approvals = subparsers.add_parser(
+        "approvals", help="list, inspect and decide human approvals"
+    )
+    _add_common_options(approvals, suppress_defaults=True)
+    approvals_sub = approvals.add_subparsers(dest="approvals_command")
+    approvals_list = approvals_sub.add_parser("list", help="list approval requests")
+    approvals_list.add_argument("--workflow")
+    approvals_list.add_argument(
+        "--status",
+        choices=[item.value for item in ApprovalStatus],
+    )
+    approvals_show = approvals_sub.add_parser("show", help="show one approval")
+    approvals_show.add_argument("approval_id")
+    approvals_approve = approvals_sub.add_parser("approve", help="approve an action")
+    approvals_approve.add_argument("approval_id")
+    approvals_approve.add_argument("--comment", default="")
+    approvals_reject = approvals_sub.add_parser("reject", help="reject an action")
+    approvals_reject.add_argument("approval_id")
+    approvals_reject.add_argument("--comment", default="")
+
+    clarification = subparsers.add_parser(
+        "clarification", help="list, inspect and answer clarification requests"
+    )
+    _add_common_options(clarification, suppress_defaults=True)
+    clarification_sub = clarification.add_subparsers(dest="clarification_command")
+    clarification_list = clarification_sub.add_parser(
+        "list", help="list clarification requests"
+    )
+    clarification_list.add_argument("--workflow")
+    clarification_list.add_argument(
+        "--status",
+        choices=[item.value for item in ClarificationStatus],
+    )
+    clarification_show = clarification_sub.add_parser(
+        "show", help="show one clarification request"
+    )
+    clarification_show.add_argument("clarification_id")
+    clarification_answer = clarification_sub.add_parser(
+        "answer", help="answer an open clarification request"
+    )
+    clarification_answer.add_argument("clarification_id")
+    clarification_answer.add_argument("answer", nargs="+")
+
+    workflows = subparsers.add_parser(
+        "workflows", help="inspect and control workflow lifecycle"
+    )
+    _add_common_options(workflows, suppress_defaults=True)
+    workflows_sub = workflows.add_subparsers(dest="workflows_command")
+    workflows_list = workflows_sub.add_parser("list", help="list workflows")
+    workflows_list.add_argument("--limit", type=int, default=20)
+    workflows_show = workflows_sub.add_parser("show", help="show one workflow")
+    workflows_show.add_argument("workflow_id")
+    workflows_pause = workflows_sub.add_parser("pause", help="pause a workflow")
+    workflows_pause.add_argument("workflow_id")
+    workflows_resume = workflows_sub.add_parser("resume", help="resume a workflow")
+    workflows_resume.add_argument("workflow_id")
+    workflows_cancel = workflows_sub.add_parser("cancel", help="cancel a workflow")
+    workflows_cancel.add_argument("workflow_id")
+    workflows_cancel.add_argument("--reason", default="human_cancel")
+
     return parser
 
 
@@ -297,6 +363,12 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return _cmd_result(args)
     if command == "metrics":
         return _cmd_metrics(args)
+    if command == "approvals":
+        return await _cmd_approvals(args)
+    if command == "clarification":
+        return await _cmd_clarification(args)
+    if command == "workflows":
+        return await _cmd_workflows(args)
     console.print(Text(f"unknown command {command!r}", style="red"))
     return 2
 
@@ -538,6 +610,15 @@ async def _handle_repl_command(line: str, runtime: AgentForgeRuntime) -> bool:
                     "/history                      workflow history\n"
                     "/result <workflow_id>         print final report\n"
                     "/metrics [workflow_id]        workflow metrics\n"
+                    "/approvals [workflow_id]      list approval requests\n"
+                    "/approve <id> [comment]       approve a pending action\n"
+                    "/reject <id> [comment]        reject a pending action\n"
+                    "/clarifications [workflow_id] list clarification requests\n"
+                    "/answer <id> <text>           answer a clarification\n"
+                    "/workflows                    list workflows\n"
+                    "/pause <workflow_id>          request workflow pause\n"
+                    "/resume <workflow_id>         resume a paused workflow\n"
+                    "/cancel <workflow_id>         cancel a workflow\n"
                     "/quit                         exit",
                 ),
                 title="REPL commands",
@@ -608,6 +689,93 @@ async def _handle_repl_command(line: str, runtime: AgentForgeRuntime) -> bool:
 
     if command == "/metrics":
         _cmd_metrics_from_store(runtime.store, workflow_id=rest or None)
+        return True
+
+    if command == "/approvals":
+        _print_approvals(console, runtime.list_approvals(rest or None))
+        return True
+
+    if command in {"/approve", "/reject"}:
+        approval_id, _, comment = rest.partition(" ")
+        if not approval_id:
+            console.print(
+                Text(f"usage: {command} <approval_id> [comment]", style="yellow")
+            )
+            return True
+        if command == "/approve":
+            approval = runtime.approve_tool(approval_id, comment=comment.strip())
+        else:
+            approval = runtime.reject_tool(approval_id, comment=comment.strip())
+        console.print(
+            Text(
+                f"{approval.status.value}: {approval.approval_id}. "
+                f"Resume with /resume {approval.workflow_id}",
+                style="bold green" if command == "/approve" else "bold red",
+            )
+        )
+        return True
+
+    if command == "/clarifications":
+        _print_clarifications(
+            console, runtime.list_clarifications(rest or None)
+        )
+        return True
+
+    if command == "/answer":
+        clarification_id, _, answer = rest.partition(" ")
+        if not clarification_id or not answer.strip():
+            console.print(
+                Text("usage: /answer <clarification_id> <text>", style="yellow")
+            )
+            return True
+        request = runtime.answer_clarification(
+            clarification_id, answer.strip()
+        )
+        console.print(
+            Text(
+                f"Answered {request.clarification_id}. "
+                f"Resume with /resume {request.workflow_id}",
+                style="bold green",
+            )
+        )
+        return True
+
+    if command == "/workflows":
+        _print_workflows(runtime.list_workflows(20))
+        return True
+
+    if command == "/pause":
+        if not rest:
+            console.print(Text("usage: /pause <workflow_id>", style="yellow"))
+            return True
+        workflow = runtime.pause_workflow(rest)
+        console.print(
+            Text(
+                f"{workflow.workflow_id} is {workflow.status.value}",
+                style="bold yellow",
+            )
+        )
+        return True
+
+    if command == "/resume":
+        if not rest:
+            console.print(Text("usage: /resume <workflow_id>", style="yellow"))
+            return True
+        workflow = await runtime.resume_workflow(rest)
+        _print_workflow_detail(runtime, workflow)
+        return True
+
+    if command == "/cancel":
+        if not rest:
+            console.print(Text("usage: /cancel <workflow_id>", style="yellow"))
+            return True
+        workflow = await runtime.cancel_workflow(rest)
+        console.print(
+            Text(
+                f"{workflow.workflow_id} is {workflow.status.value}",
+                style="bold red",
+            )
+        )
         return True
 
     if command == "/quit":
@@ -798,6 +966,164 @@ def _cmd_metrics_from_store(
     return 0
 
 
+async def _cmd_approvals(args: argparse.Namespace) -> int:
+    settings = _make_settings(args)
+    async with AgentForgeRuntime(settings) as runtime:
+        subcommand = getattr(args, "approvals_command", None) or "list"
+        if subcommand == "list":
+            status = (
+                ApprovalStatus(args.status)
+                if getattr(args, "status", None)
+                else None
+            )
+            approvals = runtime.approval_service.list(
+                getattr(args, "workflow", None), status=status
+            )
+            _print_approvals(console, approvals)
+            return 0
+        if subcommand == "show":
+            approval = runtime.get_approval(args.approval_id)
+            if approval is None:
+                console.print(
+                    Text(f"unknown approval {args.approval_id!r}", style="red")
+                )
+                return 1
+            _print_approval_detail(console, approval)
+            return 0
+        if subcommand == "approve":
+            approval = runtime.approve_tool(
+                args.approval_id, comment=args.comment
+            )
+            console.print(
+                Text(
+                    f"Approved {approval.approval_id} ({approval.tool_name}). "
+                    f"Resume with: agentforge workflows resume "
+                    f"{approval.workflow_id}",
+                    style="bold green",
+                )
+            )
+            return 0
+        if subcommand == "reject":
+            approval = runtime.reject_tool(
+                args.approval_id, comment=args.comment
+            )
+            console.print(
+                Text(
+                    f"Rejected {approval.approval_id} ({approval.tool_name}). "
+                    f"Resume with: agentforge workflows resume "
+                    f"{approval.workflow_id}",
+                    style="bold red",
+                )
+            )
+            return 0
+        console.print(Text("usage: agentforge approvals <list|show|approve|reject>"))
+        return 2
+
+
+async def _cmd_clarification(args: argparse.Namespace) -> int:
+    settings = _make_settings(args)
+    async with AgentForgeRuntime(settings) as runtime:
+        subcommand = getattr(args, "clarification_command", None) or "list"
+        if subcommand == "list":
+            status = (
+                ClarificationStatus(args.status)
+                if getattr(args, "status", None)
+                else None
+            )
+            requests = runtime.clarification_service.list(
+                getattr(args, "workflow", None), status=status
+            )
+            _print_clarifications(console, requests)
+            return 0
+        if subcommand == "show":
+            request = runtime.get_clarification(args.clarification_id)
+            if request is None:
+                console.print(
+                    Text(
+                        f"unknown clarification {args.clarification_id!r}",
+                        style="red",
+                    )
+                )
+                return 1
+            _print_clarification_detail(console, request)
+            return 0
+        if subcommand == "answer":
+            answer = " ".join(args.answer).strip()
+            request = runtime.answer_clarification(
+                args.clarification_id, answer
+            )
+            console.print(
+                Text(
+                    f"Answered {request.clarification_id}. Resume with: "
+                    f"agentforge workflows resume {request.workflow_id}",
+                    style="bold green",
+                )
+            )
+            return 0
+        console.print(
+            Text("usage: agentforge clarification <list|show|answer>")
+        )
+        return 2
+
+
+async def _cmd_workflows(args: argparse.Namespace) -> int:
+    settings = _make_settings(args)
+    async with AgentForgeRuntime(settings) as runtime:
+        subcommand = getattr(args, "workflows_command", None) or "list"
+        if subcommand == "list":
+            _print_workflows(runtime.list_workflows(args.limit))
+            return 0
+        workflow_id = getattr(args, "workflow_id", None)
+        if not workflow_id:
+            console.print(Text("workflow id is required", style="yellow"))
+            return 2
+        if subcommand == "show":
+            workflow = runtime.get_workflow(workflow_id)
+            if workflow is None:
+                console.print(Text(f"unknown workflow {workflow_id!r}", style="red"))
+                return 1
+            _print_workflow_detail(runtime, workflow)
+            return 0
+        if subcommand == "pause":
+            workflow = runtime.pause_workflow(workflow_id)
+            console.print(
+                Text(
+                    f"Workflow {workflow.workflow_id} is {workflow.status.value}. "
+                    "An active execution stops at its next control point; "
+                    "persisted tasks are preserved for resume.",
+                    style="bold yellow",
+                )
+            )
+            return 0
+        if subcommand == "resume":
+            workflow = await runtime.resume_workflow(workflow_id)
+            console.print(
+                Text(
+                    f"Workflow {workflow.workflow_id} is {workflow.status.value}.",
+                    style="bold",
+                )
+            )
+            _print_workflow_detail(runtime, workflow)
+            return 0
+        if subcommand == "cancel":
+            workflow = await runtime.cancel_workflow(
+                workflow_id, reason=args.reason
+            )
+            console.print(
+                Text(
+                    f"Workflow {workflow.workflow_id} is {workflow.status.value}. "
+                    "Pending approvals/clarifications and agent sandboxes were "
+                    "cleaned up.",
+                    style="bold red",
+                )
+            )
+            return 0
+        console.print(
+            Text("usage: agentforge workflows <list|show|pause|resume|cancel>")
+        )
+        return 2
+
+
 def _open_store(args: argparse.Namespace) -> SQLiteStore | None:
     settings = _make_settings(args)
     path = settings.resolved_sqlite_file
@@ -896,6 +1222,221 @@ def _print_tool_calls(output: Console, records: list[ToolCallRecord]) -> None:
             preview,
         )
     output.print(table)
+
+
+def _print_approvals(output: Console, approvals) -> None:
+    if not approvals:
+        output.print(Text("No approval requests found.", style="dim"))
+        return
+    table = Table(title="Approval requests")
+    table.add_column("Approval", style="bold cyan")
+    table.add_column("Workflow", style="dim")
+    table.add_column("Agent")
+    table.add_column("Tool")
+    table.add_column("Risk")
+    table.add_column("Status")
+    table.add_column("Expires")
+    for item in approvals:
+        table.add_row(
+            item.approval_id,
+            (item.workflow_id or "-")[:12],
+            item.agent_id,
+            item.tool_name or item.action,
+            item.risk_level.value,
+            Text(
+                item.status.value,
+                style=STATUS_STYLES.get(item.status.value, "white"),
+            ),
+            item.expires_at.strftime("%Y-%m-%d %H:%M:%S")
+            if item.expires_at
+            else "-",
+        )
+    output.print(table)
+
+
+def _print_approval_detail(output: Console, approval) -> None:
+    table = Table(show_header=False)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Approval", approval.approval_id)
+    table.add_row("Status", approval.status.value)
+    table.add_row("Decision", approval.decision or "-")
+    table.add_row("Workflow", approval.workflow_id or "-")
+    table.add_row("Task", approval.task_id or "-")
+    table.add_row("Agent", approval.agent_id)
+    table.add_row("Tool", approval.tool_name or approval.action)
+    table.add_row("Risk", approval.risk_level.value)
+    table.add_row("Reason", approval.reason or "-")
+    table.add_row("Summary", approval.summary)
+    table.add_row(
+        "Arguments",
+        json.dumps(approval.arguments, ensure_ascii=False, indent=2, default=str),
+    )
+    table.add_row("Argument digest", approval.argument_digest or "-")
+    table.add_row(
+        "Created", approval.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    )
+    table.add_row(
+        "Expires",
+        approval.expires_at.strftime("%Y-%m-%d %H:%M:%S")
+        if approval.expires_at
+        else "-",
+    )
+    table.add_row(
+        "Decided",
+        approval.decided_at.strftime("%Y-%m-%d %H:%M:%S")
+        if approval.decided_at
+        else "-",
+    )
+    table.add_row("Decided by", approval.decided_by or "-")
+    table.add_row("Comment", approval.comment or "-")
+    table.add_row(
+        "Consumed",
+        approval.consumed_at.strftime("%Y-%m-%d %H:%M:%S")
+        if approval.consumed_at
+        else "-",
+    )
+    output.print(table)
+
+
+def _print_clarifications(output: Console, requests) -> None:
+    if not requests:
+        output.print(Text("No clarification requests found.", style="dim"))
+        return
+    table = Table(title="Clarification requests")
+    table.add_column("Clarification", style="bold cyan")
+    table.add_column("Workflow", style="dim")
+    table.add_column("Agent")
+    table.add_column("Status")
+    table.add_column("Question")
+    for item in requests:
+        question = item.question.replace("\n", " ")
+        if len(question) > 90:
+            question = question[:90] + "..."
+        table.add_row(
+            item.clarification_id,
+            item.workflow_id[:12],
+            item.agent_id,
+            Text(
+                item.status.value,
+                style=STATUS_STYLES.get(item.status.value, "white"),
+            ),
+            question,
+        )
+    output.print(table)
+
+
+def _print_clarification_detail(output: Console, request) -> None:
+    table = Table(show_header=False)
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Clarification", request.clarification_id)
+    table.add_row("Status", request.status.value)
+    table.add_row("Workflow", request.workflow_id)
+    table.add_row("Task", request.task_id)
+    table.add_row("Agent", request.agent_id)
+    table.add_row("Question", request.question)
+    table.add_row("Context", request.context or "-")
+    table.add_row(
+        "Interpretations",
+        "\n".join(request.possible_interpretations) or "-",
+    )
+    table.add_row(
+        "Created", request.created_at.strftime("%Y-%m-%d %H:%M:%S")
+    )
+    table.add_row(
+        "Expires",
+        request.expires_at.strftime("%Y-%m-%d %H:%M:%S")
+        if request.expires_at
+        else "-",
+    )
+    table.add_row("Answer", request.answer or "-")
+    table.add_row("Answered by", request.answered_by or "-")
+    table.add_row(
+        "Answered at",
+        request.answered_at.strftime("%Y-%m-%d %H:%M:%S")
+        if request.answered_at
+        else "-",
+    )
+    output.print(table)
+
+
+def _print_workflows(workflows) -> None:
+    if not workflows:
+        console.print(Text("No workflows found.", style="dim"))
+        return
+    table = Table(title="Workflows")
+    table.add_column("Workflow", style="bold cyan")
+    table.add_column("Status")
+    table.add_column("Goal")
+    table.add_column("Created")
+    table.add_column("Duration", justify="right")
+    for workflow in workflows:
+        duration = workflow.duration_seconds()
+        table.add_row(
+            workflow.workflow_id,
+            Text(
+                workflow.status.value,
+                style=STATUS_STYLES.get(workflow.status.value, "white"),
+            ),
+            workflow.goal[:90],
+            workflow.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            f"{duration:.3f}s" if duration is not None else "-",
+        )
+    console.print(table)
+
+
+def _print_workflow_detail(runtime: AgentForgeRuntime, workflow) -> None:
+    _print_metrics(console, workflow)
+    tasks = runtime.list_tasks(workflow.workflow_id)
+    if tasks:
+        console.rule("[bold]Tasks[/bold]")
+        table = Table()
+        table.add_column("Task", style="dim")
+        table.add_column("Kind")
+        table.add_column("Agent")
+        table.add_column("Status")
+        table.add_column("Depth", justify="right")
+        for task in tasks:
+            table.add_row(
+                task.task_id[:12],
+                str(task.metadata.get("kind", "generic")),
+                task.assigned_agent or "-",
+                Text(
+                    task.status.value,
+                    style=STATUS_STYLES.get(task.status.value, "white"),
+                ),
+                str(task.depth),
+            )
+        console.print(table)
+
+    approvals = runtime.list_approvals(workflow.workflow_id)
+    if approvals:
+        console.rule("[bold]Approvals[/bold]")
+        _print_approvals(console, approvals)
+    clarifications = runtime.list_clarifications(workflow.workflow_id)
+    if clarifications:
+        console.rule("[bold]Clarifications[/bold]")
+        _print_clarifications(console, clarifications)
+    events = runtime.list_workflow_events(workflow.workflow_id)
+    if events:
+        console.rule("[bold]Lifecycle events[/bold]")
+        event_table = Table()
+        event_table.add_column("Time")
+        event_table.add_column("Event")
+        event_table.add_column("Metadata")
+        for event in events:
+            event_table.add_row(
+                event.created_at.strftime("%H:%M:%S"),
+                event.event_type,
+                json.dumps(event.metadata, ensure_ascii=False, default=str)[:160],
+            )
+        console.print(event_table)
+    if workflow.final_result:
+        console.rule("[bold]Final report[/bold]")
+        console.print(Markdown(workflow.final_result))
+    elif workflow.error:
+        console.print(Text(workflow.error, style="red"))
 
 
 def _render_workflow(
@@ -997,6 +1538,34 @@ def _print_metrics(output: Console, workflow: Workflow) -> None:
     table.add_row(
         "Delegations / max depth",
         f"{metrics.delegation_count} / {metrics.max_depth}",
+    )
+    table.add_row(
+        "Delegated tasks / completed",
+        f"{metrics.delegation_tasks} / {metrics.delegation_completed}",
+    )
+    table.add_row("Reassignments", str(metrics.reassignments))
+    table.add_row(
+        "Approvals (requests / approved / rejected / expired)",
+        f"{metrics.approval_requests} / {metrics.approval_approved} / "
+        f"{metrics.approval_rejected} / {metrics.approval_expired}",
+    )
+    table.add_row(
+        "Approval rate / avg wait",
+        f"{metrics.approval_rate:.1%} / "
+        f"{metrics.average_approval_wait_seconds:.3f}s",
+    )
+    table.add_row(
+        "Clarifications (requests / answered)",
+        f"{metrics.clarifications} / {metrics.clarification_answered}",
+    )
+    table.add_row(
+        "Clarification avg wait",
+        f"{metrics.average_clarification_wait_seconds:.3f}s",
+    )
+    table.add_row(
+        "Pauses / resumes / cancellations",
+        f"{metrics.workflow_pauses} / {metrics.workflow_resumes} / "
+        f"{metrics.workflow_cancellations}",
     )
     output.print(table)
 

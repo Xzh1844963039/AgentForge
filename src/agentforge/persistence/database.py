@@ -24,7 +24,11 @@ from agentforge.models.tool import (
     ToolCallRecord,
     ToolResultStatus,
 )
-from agentforge.models.workflow import Workflow, WorkflowMetrics, WorkflowStatus
+from agentforge.models.workflow import (
+    Workflow,
+    WorkflowMetrics,
+    WorkflowStatus,
+)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -163,6 +167,61 @@ CREATE TABLE IF NOT EXISTS artifacts (
 );
 CREATE INDEX IF NOT EXISTS idx_artifacts_owner
     ON artifacts(owner_agent_id, created_at);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    approval_id TEXT PRIMARY KEY,
+    workflow_id TEXT,
+    task_id TEXT,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    arguments TEXT NOT NULL,
+    argument_digest TEXT NOT NULL,
+    risk_level TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    details TEXT NOT NULL,
+    status TEXT NOT NULL,
+    decision TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    decided_at TEXT,
+    decided_by TEXT,
+    comment TEXT NOT NULL,
+    consumed_at TEXT,
+    metadata TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_workflow
+    ON approvals(workflow_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS clarifications (
+    clarification_id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    context TEXT NOT NULL,
+    possible_interpretations TEXT NOT NULL,
+    status TEXT NOT NULL,
+    answer TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    answered_at TEXT,
+    answered_by TEXT,
+    metadata TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_clarifications_workflow
+    ON clarifications(workflow_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS workflow_events (
+    event_id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    metadata TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
+    ON workflow_events(workflow_id, created_at);
 """
 
 
@@ -203,7 +262,7 @@ class SQLiteStore:
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
             self._conn.execute(
-                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '2') "
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '3') "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
             )
 
@@ -768,6 +827,9 @@ class SQLiteStore:
             "memory_entries",
             "tool_calls",
             "artifacts",
+            "approvals",
+            "clarifications",
+            "workflow_events",
         )
         counts: dict[str, int] = {}
         with self._lock:

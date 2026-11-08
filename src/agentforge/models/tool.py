@@ -23,7 +23,17 @@ class ApprovalStatus(str, Enum):
     NOT_REQUIRED = "not_required"
     PENDING = "pending"
     APPROVED = "approved"
-    DENIED = "denied"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+    DENIED = "denied"  # legacy alias retained for compatibility
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class PermissionDecision(str, Enum):
@@ -126,8 +136,20 @@ class ApprovalRequest(BaseModel):
     workflow_id: str | None = None
     task_id: str | None = None
     tool_name: str | None = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    argument_digest: str = ""
+    risk_level: RiskLevel = RiskLevel.HIGH
+    reason: str = ""
     details: dict[str, Any] = Field(default_factory=dict)
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    decision: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
+    expires_at: datetime | None = None
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    comment: str = ""
+    consumed_at: datetime | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalDecision(BaseModel):
@@ -135,6 +157,16 @@ class ApprovalDecision(BaseModel):
     status: ApprovalStatus
     reason: str = ""
     decided_by: str = "system"
+    comment: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalToken(BaseModel):
+    """A bound approval token supplied when replaying a suspended task."""
+
+    approval_id: str
+    tool_name: str
+    argument_digest: str
 
 
 class ArtifactRecord(BaseModel):
