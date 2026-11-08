@@ -17,6 +17,14 @@ class ToolResultStatus(str, Enum):
     TIMEOUT = "timeout"
     DENIED = "denied"
     PENDING_APPROVAL = "pending_approval"
+    NEEDS_RECONCILIATION = "needs_reconciliation"
+
+
+class ReconciliationStatus(str, Enum):
+    STARTED = "started"
+    UNRESOLVED = "unresolved"
+    RESOLVED_SUCCEEDED = "resolved_succeeded"
+    RESOLVED_FAILED = "resolved_failed"
 
 
 class ApprovalStatus(str, Enum):
@@ -167,6 +175,27 @@ class ApprovalToken(BaseModel):
     approval_id: str
     tool_name: str
     argument_digest: str
+
+
+class ToolReconciliation(BaseModel):
+    """Durable intent/outcome record for a high-risk tool invocation.
+
+    A ``STARTED``/``UNRESOLVED`` row means the platform cannot prove whether the
+    side effect happened. Replaying the call is forbidden until a human reconciles
+    it; this closes the crash window between execution and audit persistence.
+    """
+
+    reconciliation_id: str = Field(default_factory=lambda: new_id("recon"))
+    workflow_id: str
+    task_id: str
+    agent_id: str
+    tool_name: str
+    argument_digest: str
+    tool_call_id: str
+    status: ReconciliationStatus = ReconciliationStatus.STARTED
+    detail: str = ""
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class ArtifactRecord(BaseModel):

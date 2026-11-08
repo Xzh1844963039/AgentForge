@@ -23,10 +23,12 @@ from agentforge.models.tool import (
     ApprovalToken,
     ArtifactRecord,
     PermissionDecision,
+    ReconciliationStatus,
     RiskLevel,
     ToolCall,
     ToolCallRecord,
     ToolEvidence,
+    ToolReconciliation,
     ToolResultStatus,
 )
 from agentforge.models.workflow import (
@@ -60,6 +62,7 @@ __all__ = [
     "Message",
     "MessageType",
     "PermissionDecision",
+    "ReconciliationStatus",
     "RiskLevel",
     "SubtaskSpec",
     "SYSTEM_SENDER",
@@ -69,6 +72,7 @@ __all__ = [
     "ToolCall",
     "ToolCallRecord",
     "ToolEvidence",
+    "ToolReconciliation",
     "ToolResultStatus",
     "Workflow",
     "WorkflowEvent",

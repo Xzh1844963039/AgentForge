@@ -264,6 +264,66 @@ def build_parser() -> argparse.ArgumentParser:
     workflows_cancel.add_argument("workflow_id")
     workflows_cancel.add_argument("--reason", default="human_cancel")
 
+    benchmark = subparsers.add_parser(
+        "benchmark", help="Phase 5 benchmark, ablation and live-acceptance harness"
+    )
+    _add_common_options(benchmark, suppress_defaults=True)
+    benchmark_sub = benchmark.add_subparsers(dest="benchmark_command")
+
+    benchmark_list = benchmark_sub.add_parser("list", help="list benchmark tasks")
+    _add_common_options(benchmark_list, suppress_defaults=True)
+    benchmark_list.add_argument("--dataset", default="benchmarks/dev")
+    benchmark_list.add_argument("--category")
+
+    benchmark_run = benchmark_sub.add_parser("run", help="run benchmark tasks")
+    _add_common_options(benchmark_run, suppress_defaults=True)
+    benchmark_run.add_argument("--dataset", default="benchmarks/dev")
+    benchmark_run.add_argument("--task-id", action="append", default=[])
+    benchmark_run.add_argument("--category", action="append", default=[])
+    benchmark_run.add_argument(
+        "--mode",
+        choices=["multi_agent", "single_agent"],
+        default="multi_agent",
+    )
+    benchmark_run.add_argument("--repeats", type=int, default=1)
+    benchmark_run.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_run.add_argument("--batch-dir")
+    benchmark_run.add_argument("--resume", action="store_true")
+    benchmark_run.add_argument("--max-tasks", type=int)
+    benchmark_run.add_argument("--allow-live-api", action="store_true")
+    benchmark_run.add_argument("--memory", action="store_true")
+
+    benchmark_compare = benchmark_sub.add_parser(
+        "compare", help="run the A/B/C ablation"
+    )
+    _add_common_options(benchmark_compare, suppress_defaults=True)
+    benchmark_compare.add_argument("--dataset", default="benchmarks/dev")
+    benchmark_compare.add_argument("--task-id", action="append", default=[])
+    benchmark_compare.add_argument("--repeats", type=int, default=1)
+    benchmark_compare.add_argument("--output-dir", default="benchmarks/runs")
+
+    benchmark_report = benchmark_sub.add_parser(
+        "report", help="regenerate a Markdown report"
+    )
+    _add_common_options(benchmark_report, suppress_defaults=True)
+    benchmark_report.add_argument("--batch-dir")
+    benchmark_report.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_report.add_argument("--output")
+
+    benchmark_failures = benchmark_sub.add_parser(
+        "failures", help="show classified benchmark failures"
+    )
+    _add_common_options(benchmark_failures, suppress_defaults=True)
+    benchmark_failures.add_argument("--batch-dir")
+    benchmark_failures.add_argument("--output-dir", default="benchmarks/runs")
+
+    benchmark_live = benchmark_sub.add_parser(
+        "live", help="real-LLM acceptance checks (requires explicit authorization)"
+    )
+    _add_common_options(benchmark_live, suppress_defaults=True)
+    benchmark_live.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_live.add_argument("--allow-live-api", action="store_true")
+
     return parser
 
 
@@ -369,8 +429,18 @@ async def _dispatch(args: argparse.Namespace) -> int:
         return await _cmd_clarification(args)
     if command == "workflows":
         return await _cmd_workflows(args)
+    if command == "benchmark":
+        return await _cmd_benchmark(args)
     console.print(Text(f"unknown command {command!r}", style="red"))
     return 2
+
+
+async def _cmd_benchmark(args: argparse.Namespace) -> int:
+    from agentforge.cli_benchmark import run_benchmark_command
+
+    return await run_benchmark_command(
+        args, settings_factory=_make_settings, console=console
+    )
 
 
 async def _cmd_memory(args: argparse.Namespace) -> int:

@@ -9,6 +9,7 @@ runtime and orchestrator, never by the LLM.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from datetime import datetime
@@ -27,7 +28,7 @@ from agentforge.models.agent import AgentCard, AgentProfile, AgentRole
 from agentforge.models.common import utc_now
 from agentforge.models.message import Message
 from agentforge.models.task import AgentAction, AgentActionType, Task, TaskStatus
-from agentforge.models.tool import ApprovalToken, ToolEvidence
+from agentforge.models.tool import ApprovalToken, ToolEvidence, ToolResultStatus
 from agentforge.orchestration.errors import AgentOutputError
 from agentforge.tools.base import (
     ToolExecutionContext,
@@ -35,7 +36,9 @@ from agentforge.tools.base import (
     ToolResult,
 )
 from agentforge.tools.approval import ApprovalRequired, arguments_digest
-from agentforge.tools.executor import ToolExecutor
+from agentforge.tools.executor import ReconciliationRequired, ToolExecutor
+
+logger = logging.getLogger("agentforge.agents")
 
 ACTION_PROTOCOL = """Execution protocol (mandatory):
 Return exactly one JSON object and nothing else. Do not wrap it in Markdown.
@@ -366,6 +369,12 @@ class BaseAgent:
                         approval_request=exc.request,
                     ) from exc
                 tool_results.append(result)
+                if result.status == ToolResultStatus.NEEDS_RECONCILIATION:
+                    raise ReconciliationRequired(
+                        result.error
+                        or "tool outcome requires manual reconciliation",
+                        result.metadata.get("reconciliation_id"),
+                    )
                 payloads.append(
                     {
                         "call_id": call.call_id,
@@ -530,14 +539,23 @@ class BaseAgent:
         task_id: str | None = None,
         execution_id: str | None = None,
     ) -> list[str]:
-        entries = self.memory.recall(
-            self.agent_id,
-            query,
-            limit=self.memory_recall_limit,
-            workflow_id=workflow_id,
-            task_id=task_id,
-            execution_id=execution_id,
-        )
+        try:
+            entries = self.memory.recall(
+                self.agent_id,
+                query,
+                limit=self.memory_recall_limit,
+                workflow_id=workflow_id,
+                task_id=task_id,
+                execution_id=execution_id,
+            )
+        except Exception:
+            # Memory is an optimization, not a correctness dependency. A failed
+            # retrieval must not abort an otherwise valid task.
+            logger.exception(
+                "memory recall failed for agent %s; continuing without memory",
+                self.agent_id,
+            )
+            return []
         return [entry.content for entry in entries]
 
     def _system_prompt(self) -> str:

@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-11-08T16:33:23.450085+00:00",
+  "sqlite_index": {
+    "rows": 20000,
+    "query": "list_tool_calls(workflow_id, task_id)",
+    "before_index": {
+      "runs": 100,
+      "rows_returned": 10,
+      "median_ms": 0.30965,
+      "mean_ms": 0.337929,
+      "p95_ms": 0.4389,
+      "total_ms": 33.854
+    },
+    "after_index": {
+      "runs": 100,
+      "rows_returned": 10,
+      "median_ms": 0.24095,
+      "mean_ms": 0.247116,
+      "p95_ms": 0.2569,
+      "total_ms": 24.751
+    },
+    "speedup": 1.29,
+    "task_only_query": "list_tool_calls(task_id)",
+    "before_task_only": {
+      "runs": 100,
+      "rows_returned": 10,
+      "median_ms": 15.35285,
+      "mean_ms": 15.502808,
+      "p95_ms": 16.7682,
+      "total_ms": 1550.459
+    },
+    "after_task_only": {
+      "runs": 100,
+      "rows_returned": 10,
+      "median_ms": 0.24055,
+      "mean_ms": 0.245835,
+      "p95_ms": 0.2535,
+      "total_ms": 24.622
+    },
+    "task_only_speedup": 63.82,
+    "query_plan_before": [
+      [
+        3,
+        0,
+        61,
+        "SEARCH tool_calls USING INDEX idx_tool_calls_workflow (workflow_id=?)"
+      ]
+    ],
+    "query_plan_after": [
+      [
+        3,
+        0,
+        61,
+        "SEARCH tool_calls USING INDEX idx_tool_calls_workflow_task (workflow_id=? AND task_id=?)"
+      ]
+    ]
+  },
+  "prompt_catalog_cache": {
+    "iterations": 2000,
+    "tool_count": 13,
+    "catalog_chars": 6669,
+    "uncached_total_ms": 259.548,
+    "cached_total_ms": 0.231,
+    "uncached_per_call_ms": 0.129774,
+    "cached_per_call_ms": 0.000116,
+    "speedup": 1122.13
+  },
+  "notes": [
+    "Microbenchmarks isolate infrastructure overhead; end-to-end benchmark timings are dominated by Docker container startup and LLM calls.",
+    "The cache changes no prompt text; the index changes no query semantics."
+  ]
+}

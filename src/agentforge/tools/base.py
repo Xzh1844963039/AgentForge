@@ -147,6 +147,7 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
+        self._catalog_cache: str | None = None
 
     def register(self, tool: BaseTool) -> None:
         if tool.spec.name in self._tools:
@@ -154,6 +155,7 @@ class ToolRegistry:
         if not isinstance(tool, BaseTool):
             raise TypeError("only BaseTool instances can be registered")
         self._tools[tool.spec.name] = tool
+        self._catalog_cache = None
 
     def get(self, name: str) -> BaseTool:
         try:
@@ -173,6 +175,8 @@ class ToolRegistry:
     def prompt_catalog(self) -> str:
         if not self._tools:
             return "(no tools are enabled)"
+        if self._catalog_cache is not None:
+            return self._catalog_cache
         lines: list[str] = []
         for tool in self._tools.values():
             spec = tool.spec
@@ -186,7 +190,8 @@ class ToolRegistry:
                 f"requires_approval: {str(spec.requires_approval).lower()}\n"
                 f"  input_schema: {schema}"
             )
-        return "\n".join(lines)
+        self._catalog_cache = "\n".join(lines)
+        return self._catalog_cache
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools

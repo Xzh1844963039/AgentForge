@@ -16,9 +16,11 @@ from agentforge.models.tool import (
     ApprovalRequest,
     ApprovalStatus,
     PermissionDecision,
+    ReconciliationStatus,
     RiskLevel,
     ToolCall,
     ToolCallRecord,
+    ToolReconciliation,
     ToolResultStatus,
 )
 from agentforge.persistence.database import SQLiteStore
@@ -32,6 +34,14 @@ from agentforge.tools.base import (
 from agentforge.tools.policy import ToolPermissionPolicy
 
 logger = logging.getLogger("agentforge.tools.executor")
+
+
+class ReconciliationRequired(RuntimeError):
+    """A prior high-risk side effect has no trustworthy audit outcome."""
+
+    def __init__(self, message: str, reconciliation_id: str | None = None) -> None:
+        super().__init__(message)
+        self.reconciliation_id = reconciliation_id
 
 
 class ToolExecutor:
@@ -57,6 +67,7 @@ class ToolExecutor:
         self.max_output_bytes = max(1024, max_output_bytes)
         self.raise_on_pending = raise_on_pending
         self.approval_ttl_seconds = max(1, approval_ttl_seconds)
+        self.allowed_tools: frozenset[str] | None = None
 
     async def execute(
         self,
@@ -90,6 +101,26 @@ class ToolExecutor:
             return result
 
         tool_spec = tool.spec
+        if self.allowed_tools is not None and tool_spec.name not in self.allowed_tools:
+            result = ToolResult.fail(
+                f"tool {tool_spec.name!r} is not allowed for this benchmark task",
+                status=ToolResultStatus.DENIED,
+                metadata={"allowed_tools": sorted(self.allowed_tools)},
+            )
+            self._record(
+                tool_call,
+                context,
+                result,
+                started_at,
+                started_perf,
+                permission_decision=permission_decision,
+                approval_status=approval_status,
+                approval_id=None,
+                permissions=list(tool_spec.permissions),
+                metadata={"reason": "tool_not_allowed"},
+            )
+            return result
+
         evaluation = self.policy.evaluate(context.agent_id, tool_spec)
         permission_decision = evaluation.decision
         if evaluation.decision == PermissionDecision.DENIED:
@@ -167,6 +198,33 @@ class ToolExecutor:
                 agent_id=context.agent_id,
                 tool_name=tool_spec.name,
                 replayed_from=replayed.tool_call_id,
+            )
+            return result
+
+        unresolved = self._find_unresolved_reconciliation(
+            context, tool_spec.name, digest
+        )
+        if unresolved is not None:
+            result = ToolResult.fail(
+                "a previous high-risk invocation has no trustworthy audit "
+                "outcome; replay is blocked pending reconciliation",
+                status=ToolResultStatus.NEEDS_RECONCILIATION,
+                metadata={
+                    "reconciliation_id": unresolved.reconciliation_id,
+                    "reconciliation_status": unresolved.status.value,
+                },
+            )
+            self._record(
+                tool_call,
+                context,
+                result,
+                started_at,
+                started_perf,
+                permission_decision=permission_decision,
+                approval_status=approval_status,
+                approval_id=None,
+                permissions=list(evaluation.permissions),
+                metadata={"reason": "needs_reconciliation"},
             )
             return result
 
@@ -304,6 +362,47 @@ class ToolExecutor:
                     )
                     return result
 
+        high_risk = self._is_high_risk_call(tool_spec, tool_call.arguments)
+        reconciliation: ToolReconciliation | None = None
+        if high_risk and context.workflow_id and context.task_id:
+            try:
+                reconciliation = self.store.begin_tool_reconciliation(
+                    ToolReconciliation(
+                        workflow_id=context.workflow_id,
+                        task_id=context.task_id,
+                        agent_id=context.agent_id,
+                        tool_name=tool_spec.name,
+                        argument_digest=digest,
+                        tool_call_id=tool_call.call_id,
+                        status=ReconciliationStatus.STARTED,
+                        detail="side-effect intent persisted before execution",
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "failed to persist reconciliation intent for %s",
+                    tool_call.call_id,
+                )
+                result = ToolResult.fail(
+                    "cannot persist the audit intent for a high-risk action; "
+                    "the action was not executed",
+                    status=ToolResultStatus.DENIED,
+                    metadata={"reason": "audit_unavailable"},
+                )
+                self._record(
+                    tool_call,
+                    context,
+                    result,
+                    started_at,
+                    started_perf,
+                    permission_decision=permission_decision,
+                    approval_status=approval_status,
+                    approval_id=approval_id,
+                    permissions=list(evaluation.permissions),
+                    metadata={"reason": "reconciliation_intent_failed"},
+                )
+                return result
+
         try:
             result = await asyncio.wait_for(
                 tool.execute(tool_call.arguments, context),
@@ -345,7 +444,7 @@ class ToolExecutor:
         result.metadata.setdefault("approval_status", approval_status.value)
         if approval_id:
             result.metadata.setdefault("approval_id", approval_id)
-        self._record(
+        persisted = self._record(
             tool_call,
             context,
             result,
@@ -357,6 +456,23 @@ class ToolExecutor:
             permissions=list(evaluation.permissions),
             metadata={"reason": "executed"},
         )
+        if reconciliation is not None:
+            self._finish_reconciliation(
+                reconciliation,
+                result,
+                persisted=persisted,
+            )
+        if not persisted:
+            if reconciliation is None and context.workflow_id and context.task_id:
+                self._record_unresolved_without_intent(
+                    context, tool_spec.name, digest, tool_call
+                )
+            result.status = ToolResultStatus.NEEDS_RECONCILIATION
+            result.error = (
+                "tool side effect may have executed, but its audit record could "
+                "not be persisted; manual reconciliation is required"
+            )
+            result.metadata["needs_reconciliation"] = True
         return result
 
     async def execute_many(
@@ -384,6 +500,86 @@ class ToolExecutor:
         if tool_spec.requires_approval:
             return RiskLevel.MEDIUM
         return RiskLevel.LOW
+
+    @classmethod
+    def _is_high_risk_call(
+        cls, tool_spec, arguments: dict[str, Any]
+    ) -> bool:
+        return cls._risk_level(tool_spec, arguments) == RiskLevel.HIGH
+
+    def _find_unresolved_reconciliation(
+        self,
+        context: ToolExecutionContext,
+        tool_name: str,
+        digest: str,
+    ) -> ToolReconciliation | None:
+        if not context.workflow_id or not context.task_id:
+            return None
+        try:
+            return self.store.get_unresolved_reconciliation(
+                workflow_id=context.workflow_id,
+                task_id=context.task_id,
+                tool_name=tool_name,
+                argument_digest=digest,
+            )
+        except Exception:
+            logger.exception("failed to read tool reconciliation state")
+            return None
+
+    def _finish_reconciliation(
+        self,
+        reconciliation: ToolReconciliation,
+        result: ToolResult,
+        *,
+        persisted: bool,
+    ) -> None:
+        if not persisted:
+            status = ReconciliationStatus.UNRESOLVED
+            detail = (
+                "side effect executed but the audit record was not persisted: "
+                + (result.error or result.status.value)
+            )
+        elif result.status == ToolResultStatus.SUCCESS:
+            status = ReconciliationStatus.RESOLVED_SUCCEEDED
+            detail = "audit record persisted successfully"
+        else:
+            status = ReconciliationStatus.RESOLVED_FAILED
+            detail = "audited tool outcome: " + result.status.value
+        try:
+            self.store.update_tool_reconciliation(
+                reconciliation.reconciliation_id, status, detail=detail
+            )
+        except Exception:
+            logger.exception(
+                "failed to update reconciliation %s",
+                reconciliation.reconciliation_id,
+            )
+
+    def _record_unresolved_without_intent(
+        self,
+        context: ToolExecutionContext,
+        tool_name: str,
+        digest: str,
+        tool_call: ToolCall,
+    ) -> None:
+        try:
+            self.store.begin_tool_reconciliation(
+                ToolReconciliation(
+                    workflow_id=context.workflow_id or "",
+                    task_id=context.task_id or "",
+                    agent_id=context.agent_id,
+                    tool_name=tool_name,
+                    argument_digest=digest,
+                    tool_call_id=tool_call.call_id,
+                    status=ReconciliationStatus.UNRESOLVED,
+                    detail="audit persistence failed after tool execution",
+                )
+            )
+        except Exception:
+            logger.exception(
+                "failed to record unresolved reconciliation for %s",
+                tool_call.call_id,
+            )
 
     def _find_replay(
         self,
@@ -420,7 +616,7 @@ class ToolExecutor:
         approval_id: str | None,
         permissions: list[str],
         metadata: dict[str, Any],
-    ) -> ToolCallRecord:
+    ) -> bool:
         duration = max(0.0, time.perf_counter() - started_perf)
         result.duration_seconds = duration
         merged_metadata = {**metadata, **result.metadata}
@@ -445,8 +641,10 @@ class ToolExecutor:
         )
         try:
             self.store.save_tool_call(record)
+            persisted = True
         except Exception:
             logger.exception("failed to persist tool call %s", tool_call.call_id)
+            persisted = False
         self.events.event(
             "tool_call",
             tool_call_id=record.tool_call_id,
@@ -459,7 +657,7 @@ class ToolExecutor:
             approval_status=record.approval_status.value,
             error=record.error,
         )
-        return record
+        return persisted
 
     @staticmethod
     def _validate_schema(

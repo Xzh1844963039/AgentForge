@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
+from agentforge.models.common import utc_now
 from agentforge.models.execution import AgentExecution, ExecutionStatus
 from agentforge.models.message import (
     Conversation,
@@ -21,7 +22,9 @@ from agentforge.models.tool import (
     ApprovalStatus,
     ArtifactRecord,
     PermissionDecision,
+    ReconciliationStatus,
     ToolCallRecord,
+    ToolReconciliation,
     ToolResultStatus,
 )
 from agentforge.models.workflow import (
@@ -149,6 +152,10 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 );
 CREATE INDEX IF NOT EXISTS idx_tool_calls_workflow
     ON tool_calls(workflow_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_task
+    ON tool_calls(task_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_workflow_task
+    ON tool_calls(workflow_id, task_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_tool_calls_agent
     ON tool_calls(agent_id, started_at);
 
@@ -222,6 +229,23 @@ CREATE TABLE IF NOT EXISTS workflow_events (
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_events_workflow
     ON workflow_events(workflow_id, created_at);
+
+CREATE TABLE IF NOT EXISTS tool_reconciliations (
+    reconciliation_id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    argument_digest TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(workflow_id, task_id, tool_name, argument_digest)
+);
+CREATE INDEX IF NOT EXISTS idx_reconciliations_scope
+    ON tool_reconciliations(workflow_id, task_id, status);
 """
 
 
@@ -262,7 +286,7 @@ class SQLiteStore:
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
             self._conn.execute(
-                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '3') "
+                "INSERT INTO schema_meta(key, value) VALUES('schema_version', '4') "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
             )
 
@@ -753,6 +777,124 @@ class SQLiteStore:
             metadata=_loads(row["metadata"], {}),
         )
 
+    # ------------------------------------------------------- tool reconciliations
+    def begin_tool_reconciliation(
+        self, reconciliation: ToolReconciliation
+    ) -> ToolReconciliation:
+        """Persist the side-effect intent before executing a high-risk tool."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO tool_reconciliations(
+                    reconciliation_id, workflow_id, task_id, agent_id, tool_name,
+                    argument_digest, tool_call_id, status, detail, created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    reconciliation.reconciliation_id,
+                    reconciliation.workflow_id,
+                    reconciliation.task_id,
+                    reconciliation.agent_id,
+                    reconciliation.tool_name,
+                    reconciliation.argument_digest,
+                    reconciliation.tool_call_id,
+                    reconciliation.status.value,
+                    reconciliation.detail,
+                    reconciliation.created_at.isoformat(),
+                    reconciliation.updated_at.isoformat(),
+                ),
+            )
+            row = self._conn.execute(
+                "SELECT * FROM tool_reconciliations WHERE workflow_id = ? "
+                "AND task_id = ? AND tool_name = ? AND argument_digest = ?",
+                (
+                    reconciliation.workflow_id,
+                    reconciliation.task_id,
+                    reconciliation.tool_name,
+                    reconciliation.argument_digest,
+                ),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("failed to persist tool reconciliation intent")
+        return self._row_to_reconciliation(row)
+
+    def get_unresolved_reconciliation(
+        self,
+        *,
+        workflow_id: str,
+        task_id: str,
+        tool_name: str,
+        argument_digest: str,
+    ) -> ToolReconciliation | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM tool_reconciliations WHERE workflow_id = ? "
+                "AND task_id = ? AND tool_name = ? AND argument_digest = ? "
+                "AND status IN (?, ?)",
+                (
+                    workflow_id,
+                    task_id,
+                    tool_name,
+                    argument_digest,
+                    ReconciliationStatus.STARTED.value,
+                    ReconciliationStatus.UNRESOLVED.value,
+                ),
+            ).fetchone()
+        return self._row_to_reconciliation(row) if row else None
+
+    def update_tool_reconciliation(
+        self,
+        reconciliation_id: str,
+        status: ReconciliationStatus,
+        *,
+        detail: str = "",
+    ) -> None:
+        now = utc_now()
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE tool_reconciliations SET status = ?, detail = ?, "
+                "updated_at = ? WHERE reconciliation_id = ?",
+                (status.value, detail, now.isoformat(), reconciliation_id),
+            )
+
+    def list_tool_reconciliations(
+        self,
+        workflow_id: str | None = None,
+        *,
+        status: ReconciliationStatus | None = None,
+        limit: int = 200,
+    ) -> list[ToolReconciliation]:
+        query = "SELECT * FROM tool_reconciliations WHERE 1=1"
+        params: list[Any] = []
+        if workflow_id is not None:
+            query += " AND workflow_id = ?"
+            params.append(workflow_id)
+        if status is not None:
+            query += " AND status = ?"
+            params.append(status.value)
+        query += " ORDER BY created_at ASC, rowid ASC LIMIT ?"
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(query, params).fetchall()
+        return [self._row_to_reconciliation(row) for row in rows]
+
+    @staticmethod
+    def _row_to_reconciliation(row: sqlite3.Row) -> ToolReconciliation:
+        return ToolReconciliation(
+            reconciliation_id=row["reconciliation_id"],
+            workflow_id=row["workflow_id"],
+            task_id=row["task_id"],
+            agent_id=row["agent_id"],
+            tool_name=row["tool_name"],
+            argument_digest=row["argument_digest"],
+            tool_call_id=row["tool_call_id"],
+            status=ReconciliationStatus(row["status"]),
+            detail=row["detail"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
     # -------------------------------------------------------------------- artifacts
     def save_artifact(self, artifact: ArtifactRecord) -> None:
         with self._lock, self._conn:
@@ -830,6 +972,7 @@ class SQLiteStore:
             "approvals",
             "clarifications",
             "workflow_events",
+            "tool_reconciliations",
         )
         counts: dict[str, int] = {}
         with self._lock:

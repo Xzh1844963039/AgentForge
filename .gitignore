@@ -21,6 +21,15 @@ env/
 data/*
 !data/.gitkeep
 
+# Benchmark artefacts: keep compact reports/JSON/CSV, ignore workspaces and DBs
+benchmarks/runs/**/task_runs/
+benchmarks/runs/**/runs/
+benchmarks/runs/**/workspaces/
+benchmarks/runs/**/artifacts/
+benchmarks/runs/**/*.db
+benchmarks/runs/**/*.db-*
+benchmarks/runs/**/events.jsonl
+
 # Test / tooling caches
 .pytest_cache/
 .coverage
