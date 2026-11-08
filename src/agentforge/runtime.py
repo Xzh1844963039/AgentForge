@@ -17,7 +17,10 @@ from agentforge.config.settings import Settings
 from agentforge.llm.base import BaseLLMProvider, LLMResponse
 from agentforge.llm.factory import build_llm_provider
 from agentforge.logging_config import setup_logging
-from agentforge.memory.sqlite_store import SQLiteMemoryStore
+from agentforge.memory.embeddings import HashingEmbeddingProvider
+from agentforge.memory.engine import MemoryEvolutionEngine
+from agentforge.memory.evolution_store import EvolutionMemoryStore
+from agentforge.memory.models import MemoryRetrievalConfig
 from agentforge.messaging.bus import MessageBus
 from agentforge.messaging.conversation import ConversationManager
 from agentforge.models.agent import AgentCard
@@ -79,7 +82,26 @@ class AgentForgeRuntime:
         self.provider = provider or build_llm_provider(self.settings)
         self.store = SQLiteStore(self.settings.resolved_sqlite_file)
         self.events = EventLogger(self.settings.resolved_events_file)
-        self.memory = SQLiteMemoryStore(self.store)
+        self.memory = EvolutionMemoryStore(
+            self.settings.resolved_memory_file,
+            embedding_provider=HashingEmbeddingProvider(
+                self.settings.memory_embedding_dimensions
+            ),
+            retrieval_config=MemoryRetrievalConfig(
+                enabled=self.settings.memory_recall_enabled,
+                max_items=self.settings.memory_recall_limit,
+                max_chars=self.settings.memory_prompt_budget_chars,
+                include_mock=self.settings.memory_include_mock,
+                include_unverified=self.settings.memory_include_unverified,
+            ),
+            retrieval_enabled=self.settings.memory_recall_enabled,
+            decay_half_life_days=self.settings.memory_decay_half_life_days,
+            forget_threshold=self.settings.memory_forget_threshold,
+            working_ttl_seconds=self.settings.memory_working_ttl_seconds,
+        )
+        self.memory_engine = MemoryEvolutionEngine(
+            audit=self.store, memory=self.memory, settings=self.settings
+        )
 
         self.workspaces = WorkspaceManager(self.settings.resolved_workspace_root)
         self.sandboxes = SandboxManager(
@@ -132,7 +154,7 @@ class AgentForgeRuntime:
             provider=self.provider,
             memory=self.memory,
             tools=self.tools,
-            memory_recall_limit=4,
+            memory_recall_limit=self.settings.memory_recall_limit,
             tool_executor=self.tool_executor,
             max_tool_calls=self.settings.max_tool_calls_per_task,
         ):
@@ -181,6 +203,10 @@ class AgentForgeRuntime:
             await self.search_provider.aclose()
         except Exception:
             logger.exception("failed to close search provider")
+        try:
+            self.memory.close()
+        except Exception:
+            logger.exception("failed to close memory store")
         await self.provider.aclose()
         self.events.close()
         self.store.close()
@@ -270,6 +296,26 @@ class AgentForgeRuntime:
         workflow = await self.orchestrator.run_goal(goal, conversation.conversation_id)
         workflow.metadata["published_message_id"] = published.message_id
         self.store.save_workflow(workflow)
+        if self.settings.memory_evolution_enabled:
+            try:
+                evolution = self.memory_engine.process_workflow(
+                    workflow.workflow_id, learn=True
+                )
+                workflow.metadata["memory_evolution"] = evolution.model_dump(mode="json")
+                self.store.save_workflow(workflow)
+                self.events.event(
+                    "memory_evolution",
+                    workflow_id=workflow.workflow_id,
+                    created=len(evolution.created_memory_ids),
+                    promoted=len(evolution.promoted_memory_ids),
+                    candidates=len(evolution.candidate_ids),
+                    feedback=len(evolution.feedback_ids),
+                    skipped_reason=evolution.skipped_reason,
+                )
+            except Exception:
+                logger.exception(
+                    "memory evolution failed for workflow %s", workflow.workflow_id
+                )
         return workflow
 
     # ----------------------------------------------------------------- private chat
@@ -390,7 +436,12 @@ class AgentForgeRuntime:
         return self.store.count_messages(conversation_id)
 
     def table_counts(self) -> dict[str, int]:
-        return self.store.table_counts()
+        counts = self.store.table_counts()
+        counts["memory_entries"] = self.memory.total_count()
+        stats = self.memory.stats()
+        counts["memory_candidates"] = stats.candidates
+        counts["memory_feedback"] = stats.feedback_used
+        return counts
 
     @property
     def provider_name(self) -> str:

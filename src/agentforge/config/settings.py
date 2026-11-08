@@ -104,6 +104,22 @@ class Settings(BaseSettings):
     git_repo_root: Path | None = None
     git_timeout: float = Field(default=30.0, gt=0)
 
+    # --- Memory evolution (Phase 3) -------------------------------------------
+    memory_evolution_enabled: bool = True
+    memory_recall_enabled: bool = True
+    memory_file: Path | None = None
+    memory_recall_limit: int = Field(default=6, ge=1, le=20)
+    memory_prompt_budget_chars: int = Field(default=3000, ge=100, le=20_000)
+    memory_include_mock: bool = False
+    memory_include_unverified: bool = False
+    memory_promotion_threshold: int = Field(default=2, ge=1, le=10)
+    memory_promotion_confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    memory_decay_half_life_days: float = Field(default=30.0, gt=0)
+    memory_forget_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    memory_working_ttl_seconds: int = Field(default=3600, ge=1)
+    memory_embedding_dimensions: int = Field(default=256, ge=16, le=4096)
+    memory_store_mock_procedures: bool = True
+
     # --- Persistence / observability -------------------------------------------
     data_dir: Path = Path("data")
     sqlite_file: Path | None = None
@@ -128,6 +144,10 @@ class Settings(BaseSettings):
     def resolved_artifacts_root(self) -> Path:
         return self.artifacts_root or (self.data_dir / "artifacts")
 
+    @property
+    def resolved_memory_file(self) -> Path:
+        return self.memory_file or (self.data_dir / "memory_evolution.db")
+
     def ensure_directories(self) -> None:
         """Create the data/output directories required by the runtime."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -135,6 +155,7 @@ class Settings(BaseSettings):
         self.resolved_events_file.parent.mkdir(parents=True, exist_ok=True)
         self.resolved_workspace_root.mkdir(parents=True, exist_ok=True)
         self.resolved_artifacts_root.mkdir(parents=True, exist_ok=True)
+        self.resolved_memory_file.parent.mkdir(parents=True, exist_ok=True)
         if self.log_file is not None:
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
