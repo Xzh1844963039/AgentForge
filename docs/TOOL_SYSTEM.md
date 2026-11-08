@@ -230,7 +230,12 @@ Residual risk: DNS rebinding between validation and the actual connection is not
 
 ## 12. Audit and metrics
 
-SQLite `tool_calls` columns include: tool call ID, workflow, task, agent, tool, arguments, status, output, error, duration, permission decision, approval status/id, permissions, start/end, metadata.
+SQLite `tool_calls` columns include: tool call ID, workflow, task, agent, tool, arguments, status, output, error, duration, permission decision, approval status/id, permissions, start/end, metadata. The `tool_reconciliations` table stores a high-risk intent before execution and its resolved/unresolved audit outcome.
+
+Tool result statuses include `success`, `error`, `timeout`, `denied`,
+`pending_approval` and `needs_reconciliation`. The last status means a high-risk
+side effect may have executed but its audit could not be persisted; replay is
+blocked until a human reconciles it.
 
 JSONL `tool_call` events mirror status, duration, approval status and error. HITL
 transitions also emit `approval_requested`, `approval_decided`, `approval_consumed`

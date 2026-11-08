@@ -3,9 +3,9 @@
 **Project:** AgentForge — A Memory-Evolving Multi-Agent Collaborative Platform with
 Autonomous Task Delegation, Tool Execution, and Sandboxed Execution
 
-**Updated:** 2026-11-08
+**Updated:** 2026-11-09
 
-The project is delivered in six phases. Each phase ends with a runnable, tested
+The project is delivered in phases. Each phase ends with a runnable, tested
 artifact and explicit acceptance criteria. Later phases extend earlier contracts
 rather than replacing them.
 
@@ -286,9 +286,62 @@ deterministic Mock fixtures. Real-LLM HITL behavior is NOT VERIFIED.
 
 ---
 
-## Phase 5 — External integrations and real-provider hardening
+## Phase 5 — Benchmarking, real-LLM validation, reliability ✅ Complete
 
-**Goal:** validate real search/GitHub/LLM behavior and harden external I/O.
+**Goal:** measure unknown-task completion, reliability and cost honestly rather
+than adding features.
+
+### Delivered
+
+- `agentforge.benchmark` package: typed schema, dataset loader, isolated runtime
+  factory, verifiers, metrics, failure analyzer, runner, report/export, ablation
+  and live acceptance.
+- 34 internal dev tasks across 10 categories, each with objective checks or an
+  explicit manual-review requirement.
+- 8 live tasks with fixture actions removed; live calls require a key and explicit
+  `--allow-live-api`.
+- Resumable batches with JSON/JSONL/CSV/Markdown exports and Git commit capture.
+- A/B/C ablation with separate learning/evaluation tasks.
+- 11 reliability/fault-injection tests and 6 benchmark tests.
+- High-risk intent/audit reconciliation (`NEEDS_RECONCILIATION`), blocking replay
+  when the side-effect outcome is unknown.
+- SQLite indexes and tool-catalog cache with before/after measurements.
+- `agentforge benchmark list|run|compare|report|failures|live`.
+
+### Verification
+
+```text
+Full suite: 242 passed, 2 skipped
+Fixture benchmark: 34 runs, 33 passed, 1 needs review, 0 failed
+A/B/C: 6/6 passes each; multi-agent ~20% more tokens; memory retrieval 5,
+       memory used 0 (fixture does not consume retrieved content)
+Ruff F/E9: clean
+Docker: 5/5
+Live LLM: NOT VERIFIED (no key; no paid call)
+```
+
+### Acceptance criteria
+
+| Criterion | Result |
+|---|---|
+| Objective, non-self-reported success | ✅ verifier-based |
+| 30+ tasks across all categories | ✅ 34 tasks |
+| Single/multi/memory ablation | ✅ A/B/C framework + run |
+| Live acceptance framework, no silent spend | ✅ explicit gate; NOT VERIFIED |
+| Fault injection including audit crash window | ✅ 11 tests + Phase 4 |
+| Measured optimization, no correctness loss | ✅ indexes/cache measured |
+| Honest Mock/real labeling | ✅ reports and docs |
+| Regression | ✅ 242 passed, 2 skipped |
+
+**Real-LLM capability remains NOT VERIFIED.** Phase 6 must not treat fixture
+scores as model performance.
+
+---
+
+## Phase 6 — External integrations and real-provider hardening (next)
+
+**Goal:** validate real search/GitHub/LLM behavior, run live acceptance with
+explicit authorization, and harden external I/O.
 
 ### Deliverables
 
@@ -319,7 +372,7 @@ deterministic Mock fixtures. Real-LLM HITL behavior is NOT VERIFIED.
 
 ---
 
-## Phase 6 — Evaluation, scalability, final acceptance
+## Phase 7 — Final acceptance and scalability
 
 **Goal:** demonstrate correctness, usefulness, and readiness.
 
@@ -376,15 +429,18 @@ deterministic Mock fixtures. Real-LLM HITL behavior is NOT VERIFIED.
 
 ## Recommended next step
 
-Proceed to **Phase 5 — External integrations and real-provider hardening**:
+Proceed to **Phase 6 — External integrations and real-provider hardening**:
 
-1. run DeepSeek/HKGAI acceptance tests for planning, tool calling, approvals,
-   clarifications and resume behavior;
-2. validate live search and citation grounding;
-3. harden GitHub/Git operations with least-privilege credentials and dry runs;
-4. add prompt-injection/tool-output adversarial tests and secret scanning;
-5. preserve the Phase 4 invariants: final enforcement in `ToolExecutor`, exact
-   argument binding, task-scoped memory feedback, and durable lifecycle transitions.
+1. run authorized DeepSeek/HKGAI acceptance tests for planning, tools, approvals,
+   clarification and resume behavior;
+2. execute the live benchmark with explicit permission and a cost cap; compare
+   against the fixture baseline without conflating them;
+3. validate live search and citation grounding;
+4. harden GitHub/Git operations with least-privilege credentials and dry runs;
+5. add prompt-injection/tool-output adversarial tests and secret scanning;
+6. preserve Phase 4/5 invariants: final enforcement in `ToolExecutor`, exact argument
+   binding, task-scoped memory feedback, durable lifecycle transitions, objective
+   benchmark verification and reconciliation before replay.
 
-Real-LLM HITL, memory learning and resume quality remain explicitly NOT VERIFIED
-until those API acceptance runs exist.
+Real-LLM HITL, memory learning, live benchmark performance and resume quality remain
+explicitly NOT VERIFIED until those API acceptance runs exist. Do not auto-advance.

@@ -1,0 +1,309 @@
+[
+  {
+    "run_id": "r_2a9b1d1f24354c17",
+    "batch_id": "batch_d5b87d064f4541a1bc58c63178185482",
+    "task_id": "file_exact_create",
+    "title": "Create an exact Markdown file",
+    "category": "file_editing",
+    "difficulty": "basic",
+    "repeat_index": 0,
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "benchmark-fixture",
+    "model": "agentforge-fixture-policy-v1",
+    "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+    "started_at": "2026-11-08T16:47:05.911197Z",
+    "finished_at": "2026-11-08T16:47:06.032460Z",
+    "run_status": "passed",
+    "verification": {
+      "status": "passed",
+      "checks": [
+        {
+          "name": "file:coding:notes/hello.md",
+          "passed": true,
+          "detail": "48 bytes"
+        },
+        {
+          "name": "workflow",
+          "passed": true,
+          "detail": "completed"
+        }
+      ],
+      "failure_reason": null,
+      "manual_review_reason": null,
+      "details": {}
+    },
+    "workflow_id": "wf_9fa1f05ea6e5406daae045ce27a5e228",
+    "workflow_status": "completed",
+    "workflow_error": null,
+    "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+    "metrics": {
+      "goal_success": true,
+      "workflow_completed": true,
+      "subtask_completion_rate": 1.0,
+      "end_to_end_seconds": 0.125,
+      "active_seconds": 0.062000000005355105,
+      "human_wait_seconds": 0.0,
+      "llm_calls": 6,
+      "prompt_tokens": 14978,
+      "completion_tokens": 180,
+      "total_tokens": 15158,
+      "tool_calls": 1,
+      "tool_failures": 0,
+      "tool_failure_rate": 0.0,
+      "retry_count": 0,
+      "delegation_count": 0,
+      "delegation_success_rate": 0.0,
+      "memory_retrieval_count": 0,
+      "memory_usage_count": 0,
+      "approval_count": 0,
+      "clarification_count": 0,
+      "recovery_success": false,
+      "workflow_crash_or_timeout": false,
+      "tool_budget_exceeded": false,
+      "token_budget_exceeded": false,
+      "time_budget_exceeded": false,
+      "invalid_json_rate": 0.0,
+      "tool_schema_error_rate": 0.0,
+      "plan_validation_failure_rate": 0.0,
+      "tool_calling_success_rate": 1.0,
+      "agent_completion_rate": 1.0
+    },
+    "failure": null,
+    "human_interactions": [],
+    "config_snapshot": {
+      "mode": "multi_agent",
+      "provider_kind": "fixture",
+      "memory_evolution": false,
+      "memory_recall": false,
+      "time_budget_seconds": 60.0,
+      "token_budget": 200000,
+      "tool_budget": 15,
+      "max_delegation_depth": 2,
+      "allowed_tools": [
+        "write_file",
+        "read_file"
+      ]
+    },
+    "artifacts": [
+      "coding/notes/hello.md"
+    ],
+    "notes": []
+  },
+  {
+    "run_id": "r_ed702510fb8b4364",
+    "batch_id": "batch_d5b87d064f4541a1bc58c63178185482",
+    "task_id": "approval_delete_rejected",
+    "title": "Reject a destructive deletion",
+    "category": "approval",
+    "difficulty": "basic",
+    "repeat_index": 0,
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "benchmark-fixture",
+    "model": "agentforge-fixture-policy-v1",
+    "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+    "started_at": "2026-11-08T16:47:06.048286Z",
+    "finished_at": "2026-11-08T16:47:06.185610Z",
+    "run_status": "passed",
+    "verification": {
+      "status": "passed",
+      "checks": [
+        {
+          "name": "file:coding:notes/delete_me.md",
+          "passed": true,
+          "detail": "19 bytes"
+        },
+        {
+          "name": "tool_calls:delete_file",
+          "passed": true,
+          "detail": "1 match(es)"
+        },
+        {
+          "name": "workflow",
+          "passed": true,
+          "detail": "completed"
+        },
+        {
+          "name": "approval:delete_file",
+          "passed": true,
+          "detail": "1 match(es)"
+        }
+      ],
+      "failure_reason": null,
+      "manual_review_reason": null,
+      "details": {}
+    },
+    "workflow_id": "wf_6c55c713e4d2412ab69b8dcc70ff6052",
+    "workflow_status": "completed",
+    "workflow_error": null,
+    "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+    "metrics": {
+      "goal_success": true,
+      "workflow_completed": true,
+      "subtask_completion_rate": 1.0,
+      "end_to_end_seconds": 0.125,
+      "active_seconds": 0.04700000000593718,
+      "human_wait_seconds": 0.0,
+      "llm_calls": 7,
+      "prompt_tokens": 15354,
+      "completion_tokens": 168,
+      "total_tokens": 15522,
+      "tool_calls": 2,
+      "tool_failures": 2,
+      "tool_failure_rate": 1.0,
+      "retry_count": 1,
+      "delegation_count": 0,
+      "delegation_success_rate": 0.0,
+      "memory_retrieval_count": 0,
+      "memory_usage_count": 0,
+      "approval_count": 1,
+      "clarification_count": 0,
+      "recovery_success": false,
+      "workflow_crash_or_timeout": false,
+      "tool_budget_exceeded": false,
+      "token_budget_exceeded": false,
+      "time_budget_exceeded": false,
+      "invalid_json_rate": 0.0,
+      "tool_schema_error_rate": 0.0,
+      "plan_validation_failure_rate": 0.0,
+      "tool_calling_success_rate": 0.0,
+      "agent_completion_rate": 1.0
+    },
+    "failure": null,
+    "human_interactions": [
+      {
+        "kind": "approval",
+        "target_id": "approval_bc4e9eb9efca431c876f716ac20d2720",
+        "decision": "reject",
+        "simulated": true,
+        "wait_seconds": 0.0,
+        "created_at": "2026-11-08T16:47:06.138511Z"
+      }
+    ],
+    "config_snapshot": {
+      "mode": "multi_agent",
+      "provider_kind": "fixture",
+      "memory_evolution": false,
+      "memory_recall": false,
+      "time_budget_seconds": 60.0,
+      "token_budget": 200000,
+      "tool_budget": 15,
+      "max_delegation_depth": 2,
+      "allowed_tools": [
+        "delete_file",
+        "write_file",
+        "read_file"
+      ]
+    },
+    "artifacts": [
+      "coding/notes/delete_me.md"
+    ],
+    "notes": []
+  },
+  {
+    "run_id": "r_52e83951096e4321",
+    "batch_id": "batch_d5b87d064f4541a1bc58c63178185482",
+    "task_id": "clarification_retention",
+    "title": "Answer a retention question",
+    "category": "clarification",
+    "difficulty": "basic",
+    "repeat_index": 0,
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "benchmark-fixture",
+    "model": "agentforge-fixture-policy-v1",
+    "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+    "started_at": "2026-11-08T16:47:06.203616Z",
+    "finished_at": "2026-11-08T16:47:06.326172Z",
+    "run_status": "passed",
+    "verification": {
+      "status": "passed",
+      "checks": [
+        {
+          "name": "file:coding:notes/retention.md",
+          "passed": true,
+          "detail": "27 bytes"
+        },
+        {
+          "name": "workflow",
+          "passed": true,
+          "detail": "completed"
+        },
+        {
+          "name": "clarification:answered",
+          "passed": true,
+          "detail": "1 match(es)"
+        }
+      ],
+      "failure_reason": null,
+      "manual_review_reason": null,
+      "details": {}
+    },
+    "workflow_id": "wf_10518138501f45bf8e6a3d5825f26dce",
+    "workflow_status": "completed",
+    "workflow_error": null,
+    "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+    "metrics": {
+      "goal_success": true,
+      "workflow_completed": true,
+      "subtask_completion_rate": 1.0,
+      "end_to_end_seconds": 0.11000000000058208,
+      "active_seconds": 0.046999999991385266,
+      "human_wait_seconds": 0.0,
+      "llm_calls": 7,
+      "prompt_tokens": 14986,
+      "completion_tokens": 173,
+      "total_tokens": 15159,
+      "tool_calls": 1,
+      "tool_failures": 0,
+      "tool_failure_rate": 0.0,
+      "retry_count": 0,
+      "delegation_count": 0,
+      "delegation_success_rate": 0.0,
+      "memory_retrieval_count": 0,
+      "memory_usage_count": 0,
+      "approval_count": 0,
+      "clarification_count": 1,
+      "recovery_success": false,
+      "workflow_crash_or_timeout": false,
+      "tool_budget_exceeded": false,
+      "token_budget_exceeded": false,
+      "time_budget_exceeded": false,
+      "invalid_json_rate": 0.0,
+      "tool_schema_error_rate": 0.0,
+      "plan_validation_failure_rate": 0.0,
+      "tool_calling_success_rate": 1.0,
+      "agent_completion_rate": 1.0
+    },
+    "failure": null,
+    "human_interactions": [
+      {
+        "kind": "clarification",
+        "target_id": "clarify_f0985509073f4930998199f85af3bdae",
+        "decision": "90 days",
+        "simulated": true,
+        "wait_seconds": 0.0,
+        "created_at": "2026-11-08T16:47:06.277761Z"
+      }
+    ],
+    "config_snapshot": {
+      "mode": "multi_agent",
+      "provider_kind": "fixture",
+      "memory_evolution": false,
+      "memory_recall": false,
+      "time_budget_seconds": 60.0,
+      "token_budget": 200000,
+      "tool_budget": 15,
+      "max_delegation_depth": 2,
+      "allowed_tools": [
+        "write_file",
+        "read_file"
+      ]
+    },
+    "artifacts": [
+      "coding/notes/retention.md"
+    ],
+    "notes": []
+  }
+]

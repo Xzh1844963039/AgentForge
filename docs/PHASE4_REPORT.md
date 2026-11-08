@@ -261,12 +261,14 @@ is preserved.
 
 ## 9. Recommended next phase
 
-Proceed to **Phase 5 — External integrations and real-provider hardening**:
+Phase 5 subsequently delivered the benchmark/ablation/reliability harness; see
+`docs/PHASE5_REPORT.md`. The next step is **Phase 6 — External integrations and
+real-provider hardening**:
 
-1. DeepSeek/HKGAI acceptance runs for planning, tools, approvals, clarification and
-   resume stability;
-2. live search/citation validation;
-3. controlled GitHub operations with least-privilege credentials;
-4. prompt-injection/tool-output adversarial tests and secret scanning;
+1. authorized DeepSeek/HKGAI acceptance runs for planning, tools, approvals,
+   clarification and resume stability;
+2. live benchmark execution with a cost cap;
+3. live search/citation validation;
+4. controlled GitHub operations with least-privilege credentials;
 5. keep Phase 4 invariants unchanged: final enforcement in `ToolExecutor`, exact
    argument binding, durable lifecycle transitions and task-scoped memory feedback.

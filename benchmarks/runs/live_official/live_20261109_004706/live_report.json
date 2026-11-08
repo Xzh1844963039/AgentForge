@@ -1,0 +1,93 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "api_key_configured": false,
+  "live_api_allowed": false,
+  "checked_at": "2026-11-08T16:47:05.808288Z",
+  "status": "NOT_VERIFIED",
+  "checks": [
+    {
+      "check_id": "complex_goal_decomposition",
+      "description": "Complex goal produces a valid plan DAG.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "structured_json_action",
+      "description": "Agent actions are valid structured JSON.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "tool_calling",
+      "description": "Tools are called with schema-valid arguments.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "python_code_generation",
+      "description": "Generated Python passes real execution tests.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "tool_result_interpretation",
+      "description": "Agent correctly uses real tool stdout/errors.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "agent_to_agent_delegation",
+      "description": "Delegated child work completes and returns.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "reviewer_evaluation",
+      "description": "Governance review task completes.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "clarification_request",
+      "description": "Workflow pauses and resumes from a human answer.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "approval_request",
+      "description": "Destructive action waits for and respects approval.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    },
+    {
+      "check_id": "memory_retrieval_and_reuse",
+      "description": "Memory is retrieved and changes a later run.",
+      "status": "NOT_VERIFIED",
+      "detail": "",
+      "metrics": {}
+    }
+  ],
+  "harness_validation": {
+    "status": "PASSED",
+    "batch_dir": "benchmarks\\runs\\live_official\\live_harness\\batch_004705_4500",
+    "runs": 3,
+    "passed": 3,
+    "failed": 0,
+    "needs_review": 0,
+    "skipped": 0,
+    "note": "Fixture decisions validated the harness; this is not an LLM capability result."
+  },
+  "notes": [
+    "Live checks remain NOT_VERIFIED: no API key configured; live API calls were not explicitly authorized."
+  ]
+}

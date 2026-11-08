@@ -1,0 +1,2109 @@
+{
+  "ablation_id": "ablation_20261109_004629_6x1",
+  "dataset_id": "dev",
+  "task_ids": [
+    "research_basic_facts",
+    "codegen_add_function",
+    "debug_off_by_one",
+    "file_exact_create",
+    "execute_compute_sum",
+    "plan_research_to_coding"
+  ],
+  "learning_task_ids": [
+    "file_multi_artifact",
+    "file_revision_copy"
+  ],
+  "repeats": 1,
+  "created_at": "2026-11-08T16:46:29.490680Z",
+  "configs": [
+    {
+      "name": "A_single_agent",
+      "mode": "single_agent",
+      "memory": false,
+      "description": "One all-capability agent, same tool framework, no memory."
+    },
+    {
+      "name": "B_multi_agent",
+      "mode": "multi_agent",
+      "memory": false,
+      "description": "Default four-agent runtime without memory."
+    },
+    {
+      "name": "C_multi_agent_memory",
+      "mode": "multi_agent",
+      "memory": true,
+      "description": "Default four-agent runtime with learning memory."
+    }
+  ],
+  "aggregates": {
+    "A_single_agent": {
+      "total_runs": 6,
+      "passed": 6,
+      "failed": 0,
+      "needs_review": 0,
+      "skipped": 0,
+      "timeout": 0,
+      "errors": 0,
+      "goal_completion_rate": 1.0,
+      "average_end_to_end_seconds": 1.104000000001785,
+      "median_end_to_end_seconds": 1.1010000000023865,
+      "p95_end_to_end_seconds": 2.1097500000032596,
+      "average_active_seconds": 1.0443333333363019,
+      "total_human_wait_seconds": 0.0,
+      "total_llm_calls": 36,
+      "total_tokens": 94915,
+      "average_tokens": 15819.166666666666,
+      "total_tool_calls": 11,
+      "tool_failure_rate": 0.0,
+      "total_retries": 0,
+      "total_delegations": 0,
+      "delegation_success_rate": 0.0,
+      "total_memory_retrievals": 0,
+      "total_memory_usage": 0,
+      "total_approvals": 0,
+      "total_clarifications": 0,
+      "recovery_success_rate": 0.0,
+      "crash_or_timeout_rate": 0.0,
+      "by_category": [
+        {
+          "category": "code_execution",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.1090000000112923,
+          "average_active_seconds": 2.047000000005937,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "code_generation",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.110000000000582,
+          "average_active_seconds": 2.047000000005937,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 5.0
+        },
+        {
+          "category": "debugging",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.062000000005355,
+          "average_active_seconds": 2.0,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "file_editing",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.09399999999732245,
+          "average_active_seconds": 0.04700000000593718,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 5.0
+        },
+        {
+          "category": "planning",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.13999999999941792,
+          "average_active_seconds": 0.07800000000861473,
+          "average_tool_calls": 3.0,
+          "average_llm_calls": 8.0
+        },
+        {
+          "category": "research",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.10899999999674037,
+          "average_active_seconds": 0.046999999991385266,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 6.0
+        }
+      ],
+      "notes": [
+        "Mock fixture decisions are harness validation, not LLM quality."
+      ]
+    },
+    "B_multi_agent": {
+      "total_runs": 6,
+      "passed": 6,
+      "failed": 0,
+      "needs_review": 0,
+      "skipped": 0,
+      "timeout": 0,
+      "errors": 0,
+      "goal_completion_rate": 1.0,
+      "average_end_to_end_seconds": 1.1121666666658712,
+      "median_end_to_end_seconds": 1.1094999999986612,
+      "p95_end_to_end_seconds": 2.1335000000035507,
+      "average_active_seconds": 1.0445000000011835,
+      "total_human_wait_seconds": 0.0,
+      "total_llm_calls": 42,
+      "total_tokens": 114511,
+      "average_tokens": 19085.166666666668,
+      "total_tool_calls": 11,
+      "tool_failure_rate": 0.0,
+      "total_retries": 0,
+      "total_delegations": 0,
+      "delegation_success_rate": 0.0,
+      "total_memory_retrievals": 0,
+      "total_memory_usage": 0,
+      "total_approvals": 0,
+      "total_clarifications": 0,
+      "recovery_success_rate": 0.0,
+      "crash_or_timeout_rate": 0.0,
+      "by_category": [
+        {
+          "category": "code_execution",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.062999999994645,
+          "average_active_seconds": 2.0,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        },
+        {
+          "category": "code_generation",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.062999999994645,
+          "average_active_seconds": 2.0,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "debugging",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.1570000000065193,
+          "average_active_seconds": 2.0789999999979045,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        },
+        {
+          "category": "file_editing",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.10899999999674037,
+          "average_active_seconds": 0.046999999991385266,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "planning",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.15600000000267755,
+          "average_active_seconds": 0.07800000000861473,
+          "average_tool_calls": 3.0,
+          "average_llm_calls": 9.0
+        },
+        {
+          "category": "research",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.125,
+          "average_active_seconds": 0.06300000000919681,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        }
+      ],
+      "notes": [
+        "Mock fixture decisions are harness validation, not LLM quality."
+      ]
+    },
+    "C_multi_agent_memory": {
+      "total_runs": 6,
+      "passed": 6,
+      "failed": 0,
+      "needs_review": 0,
+      "skipped": 0,
+      "timeout": 0,
+      "errors": 0,
+      "goal_completion_rate": 1.0,
+      "average_end_to_end_seconds": 1.1351666666644935,
+      "median_end_to_end_seconds": 1.1484999999956926,
+      "p95_end_to_end_seconds": 2.139999999999418,
+      "average_active_seconds": 1.0781666666686458,
+      "total_human_wait_seconds": 0.0,
+      "total_llm_calls": 42,
+      "total_tokens": 120590,
+      "average_tokens": 20098.333333333332,
+      "total_tool_calls": 11,
+      "tool_failure_rate": 0.0,
+      "total_retries": 0,
+      "total_delegations": 0,
+      "delegation_success_rate": 0.0,
+      "total_memory_retrievals": 5,
+      "total_memory_usage": 0,
+      "total_approvals": 0,
+      "total_clarifications": 0,
+      "recovery_success_rate": 0.0,
+      "crash_or_timeout_rate": 0.0,
+      "by_category": [
+        {
+          "category": "code_execution",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.125,
+          "average_active_seconds": 2.062999999994645,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        },
+        {
+          "category": "code_generation",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.139999999999418,
+          "average_active_seconds": 2.0930000000080327,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "debugging",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 2.139999999999418,
+          "average_active_seconds": 2.0780000000086147,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        },
+        {
+          "category": "file_editing",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.10899999999674037,
+          "average_active_seconds": 0.062000000005355105,
+          "average_tool_calls": 1.0,
+          "average_llm_calls": 6.0
+        },
+        {
+          "category": "planning",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.17199999999138527,
+          "average_active_seconds": 0.11000000000058208,
+          "average_tool_calls": 3.0,
+          "average_llm_calls": 9.0
+        },
+        {
+          "category": "research",
+          "total": 1,
+          "passed": 1,
+          "failed": 0,
+          "needs_review": 0,
+          "skipped": 0,
+          "success_rate": 1.0,
+          "average_end_to_end_seconds": 0.125,
+          "average_active_seconds": 0.0629999999946449,
+          "average_tool_calls": 2.0,
+          "average_llm_calls": 7.0
+        }
+      ],
+      "notes": [
+        "Mock fixture decisions are harness validation, not LLM quality."
+      ]
+    }
+  },
+  "runs": {
+    "A_single_agent": [
+      {
+        "run_id": "r_2f4129b490e04e9e",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "research_basic_facts",
+        "title": "Grounded research brief",
+        "category": "research",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:29.591524Z",
+        "finished_at": "2026-11-08T16:46:29.713091Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:solo:notes/brief.md",
+              "passed": true,
+              "detail": "134 bytes"
+            },
+            {
+              "name": "tool_calls:read_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "tool_calls:write_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_138190ab8df64f368ba96ff5b62c18f0",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.10899999999674037,
+          "active_seconds": 0.046999999991385266,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 15684,
+          "completion_tokens": 202,
+          "total_tokens": 15886,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/brief.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_1d89e7699b0e497a",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "codegen_add_function",
+        "title": "Implement add()",
+        "category": "code_generation",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:29.781739Z",
+        "finished_at": "2026-11-08T16:46:32.418338Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:solo:scripts/solution.py",
+              "passed": true,
+              "detail": "exit=0 stdout='ADD_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_7a9cc2b364534eba9a71af68257d6d9c",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.110000000000582,
+          "active_seconds": 2.047000000005937,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 5,
+          "prompt_tokens": 12131,
+          "completion_tokens": 166,
+          "total_tokens": 12297,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/solution.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_096abf3e005d4671",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "debug_off_by_one",
+        "title": "Fix an off-by-one bug",
+        "category": "debugging",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:32.734625Z",
+        "finished_at": "2026-11-08T16:46:35.314860Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:solo:scripts/fixed.py",
+              "passed": true,
+              "detail": "exit=0 stdout='FIXED_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_481fa558284246caab708da21a4d8f41",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.062000000005355,
+          "active_seconds": 2.0,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 15682,
+          "completion_tokens": 173,
+          "total_tokens": 15855,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "python_execute"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/fixed.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_8691342638a64f09",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "file_exact_create",
+        "title": "Create an exact Markdown file",
+        "category": "file_editing",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:35.634782Z",
+        "finished_at": "2026-11-08T16:46:35.747025Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:solo:notes/hello.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_bca60863b23b4fb8960910aa495d89be",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.09399999999732245,
+          "active_seconds": 0.04700000000593718,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 5,
+          "prompt_tokens": 11958,
+          "completion_tokens": 153,
+          "total_tokens": 12111,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/hello.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_88a35f664c804ade",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "plan_research_to_coding",
+        "title": "Research-to-coding plan",
+        "category": "planning",
+        "difficulty": "hard",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:35.763853Z",
+        "finished_at": "2026-11-08T16:46:35.920827Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:solo:notes/research.md",
+              "passed": true,
+              "detail": "35 bytes"
+            },
+            {
+              "name": "file:solo:notes/plan.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "task_graph",
+              "passed": true,
+              "detail": "tasks=4 completed=4 delegated=0 max_depth=1"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_e527f83ca83a44f2945b5a62e3d5fa9b",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.13999999999941792,
+          "active_seconds": 0.07800000000861473,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 8,
+          "prompt_tokens": 22626,
+          "completion_tokens": 272,
+          "total_tokens": 22898,
+          "tool_calls": 3,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/research.md",
+          "coding/notes/plan.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_046c89790f9a4a3d",
+        "batch_id": "batch_b82b6883c50d444fa8515358906afad4",
+        "task_id": "execute_compute_sum",
+        "title": "Execute Python and report stdout",
+        "category": "code_execution",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "single_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:35.937531Z",
+        "finished_at": "2026-11-08T16:46:38.056224Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:solo:notes/execution.md",
+              "passed": true,
+              "detail": "37 bytes"
+            },
+            {
+              "name": "tool_calls:python_execute",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_0c8d74ca359f47708dc2b24dc5c7eeee",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.1090000000112923,
+          "active_seconds": 2.047000000005937,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 15677,
+          "completion_tokens": 191,
+          "total_tokens": 15868,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "single_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/execution.md"
+        ],
+        "notes": []
+      }
+    ],
+    "B_multi_agent": [
+      {
+        "run_id": "r_d2beed2586ec4633",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "research_basic_facts",
+        "title": "Grounded research brief",
+        "category": "research",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:38.763852Z",
+        "finished_at": "2026-11-08T16:46:38.893762Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:research:notes/brief.md",
+              "passed": true,
+              "detail": "134 bytes"
+            },
+            {
+              "name": "tool_calls:read_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "tool_calls:write_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_8a9a7a40f3af46eda061be158928b164",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.125,
+          "active_seconds": 0.06300000000919681,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 18975,
+          "completion_tokens": 229,
+          "total_tokens": 19204,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/brief.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_c94933c960d048e9",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "codegen_add_function",
+        "title": "Implement add()",
+        "category": "code_generation",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:38.921891Z",
+        "finished_at": "2026-11-08T16:46:41.512766Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:coding:scripts/solution.py",
+              "passed": true,
+              "detail": "exit=0 stdout='ADD_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_b5c52f552e4e4ba48967767acbec787e",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.062999999994645,
+          "active_seconds": 2.0,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 15218,
+          "completion_tokens": 193,
+          "total_tokens": 15411,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/solution.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_2734684cccfc46de",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "debug_off_by_one",
+        "title": "Fix an off-by-one bug",
+        "category": "debugging",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:41.832122Z",
+        "finished_at": "2026-11-08T16:46:44.519931Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:coding:scripts/fixed.py",
+              "passed": true,
+              "detail": "exit=0 stdout='FIXED_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_e90ae9d6e01c40b090e223f29339d660",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.1570000000065193,
+          "active_seconds": 2.0789999999979045,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 18979,
+          "completion_tokens": 200,
+          "total_tokens": 19179,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "python_execute"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/fixed.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_a2b4ddb299fd4513",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "file_exact_create",
+        "title": "Create an exact Markdown file",
+        "category": "file_editing",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:44.846834Z",
+        "finished_at": "2026-11-08T16:46:44.967027Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:coding:notes/hello.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_5e7e7c1c4adf4369ac8c8c98e4488c51",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.10899999999674037,
+          "active_seconds": 0.046999999991385266,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 14978,
+          "completion_tokens": 180,
+          "total_tokens": 15158,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/hello.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_7919d1fe5ced413e",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "plan_research_to_coding",
+        "title": "Research-to-coding plan",
+        "category": "planning",
+        "difficulty": "hard",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:44.984211Z",
+        "finished_at": "2026-11-08T16:46:45.156433Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:research:notes/research.md",
+              "passed": true,
+              "detail": "35 bytes"
+            },
+            {
+              "name": "file:coding:notes/plan.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "task_graph",
+              "passed": true,
+              "detail": "tasks=5 completed=5 delegated=0 max_depth=1"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_bdf747cf267f447e81d9012435224560",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.15600000000267755,
+          "active_seconds": 0.07800000000861473,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 9,
+          "prompt_tokens": 26073,
+          "completion_tokens": 299,
+          "total_tokens": 26372,
+          "tool_calls": 3,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/research.md",
+          "coding/notes/plan.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_ae913f53e27c4102",
+        "batch_id": "batch_abb21abd66b549b5b943951026516c30",
+        "task_id": "execute_compute_sum",
+        "title": "Execute Python and report stdout",
+        "category": "code_execution",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:45.172503Z",
+        "finished_at": "2026-11-08T16:46:47.242920Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:coding:notes/execution.md",
+              "passed": true,
+              "detail": "37 bytes"
+            },
+            {
+              "name": "tool_calls:python_execute",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_c3a06debdf264da9ad42971fa0a1b155",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.062999999994645,
+          "active_seconds": 2.0,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 18969,
+          "completion_tokens": 218,
+          "total_tokens": 19187,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": false,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/execution.md"
+        ],
+        "notes": []
+      }
+    ],
+    "C_multi_agent_memory": [
+      {
+        "run_id": "r_4a6e7e7cdd6d4836",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "research_basic_facts",
+        "title": "Grounded research brief",
+        "category": "research",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:48.111521Z",
+        "finished_at": "2026-11-08T16:46:48.241523Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:research:notes/brief.md",
+              "passed": true,
+              "detail": "134 bytes"
+            },
+            {
+              "name": "tool_calls:read_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "tool_calls:write_file",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_d52f21932d964707b38a4baddecf14f0",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.125,
+          "active_seconds": 0.0629999999946449,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 18975,
+          "completion_tokens": 229,
+          "total_tokens": 19204,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 0,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/brief.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_cb51ffc785844552",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "codegen_add_function",
+        "title": "Implement add()",
+        "category": "code_generation",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:48.264738Z",
+        "finished_at": "2026-11-08T16:46:50.927220Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:coding:scripts/solution.py",
+              "passed": true,
+              "detail": "exit=0 stdout='ADD_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_89256111efd548ad91de90fcddb7038f",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.139999999999418,
+          "active_seconds": 2.0930000000080327,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 16229,
+          "completion_tokens": 193,
+          "total_tokens": 16422,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 1,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/solution.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_02f443c3506542b2",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "debug_off_by_one",
+        "title": "Fix an off-by-one bug",
+        "category": "debugging",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:51.265959Z",
+        "finished_at": "2026-11-08T16:46:53.930335Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "python:coding:scripts/fixed.py",
+              "passed": true,
+              "detail": "exit=0 stdout='FIXED_OK\\n'"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_32a4d7e981b54736bd2e42185fa32bdc",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.139999999999418,
+          "active_seconds": 2.0780000000086147,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 20506,
+          "completion_tokens": 200,
+          "total_tokens": 20706,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 1,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 8,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "python_execute"
+          ]
+        },
+        "artifacts": [
+          "coding/scripts/fixed.py"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_20d4a86f7acb482f",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "file_exact_create",
+        "title": "Create an exact Markdown file",
+        "category": "file_editing",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:54.262548Z",
+        "finished_at": "2026-11-08T16:46:54.381928Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:coding:notes/hello.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_32af6b149b1e491d997c915d6df0f665",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.10899999999674037,
+          "active_seconds": 0.062000000005355105,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 6,
+          "prompt_tokens": 15990,
+          "completion_tokens": 180,
+          "total_tokens": 16170,
+          "tool_calls": 1,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 1,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/hello.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_7ea0a0027f8c46d4",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "plan_research_to_coding",
+        "title": "Research-to-coding plan",
+        "category": "planning",
+        "difficulty": "hard",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:54.397406Z",
+        "finished_at": "2026-11-08T16:46:54.579480Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:research:notes/research.md",
+              "passed": true,
+              "detail": "35 bytes"
+            },
+            {
+              "name": "file:coding:notes/plan.md",
+              "passed": true,
+              "detail": "48 bytes"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            },
+            {
+              "name": "task_graph",
+              "passed": true,
+              "detail": "tasks=5 completed=5 delegated=0 max_depth=1"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_a66b2a2eb9164daea9a38df4192d081f",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 0.17199999999138527,
+          "active_seconds": 0.11000000000058208,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 9,
+          "prompt_tokens": 27084,
+          "completion_tokens": 299,
+          "total_tokens": 27383,
+          "tool_calls": 3,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 1,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 60.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "read_file",
+            "write_file"
+          ]
+        },
+        "artifacts": [
+          "research/notes/research.md",
+          "coding/notes/plan.md"
+        ],
+        "notes": []
+      },
+      {
+        "run_id": "r_5fa7806fd9cc4780",
+        "batch_id": "batch_6ba11cd477c74f62bafd4c1a887256a2",
+        "task_id": "execute_compute_sum",
+        "title": "Execute Python and report stdout",
+        "category": "code_execution",
+        "difficulty": "basic",
+        "repeat_index": 0,
+        "mode": "multi_agent",
+        "provider_kind": "fixture",
+        "provider_name": "benchmark-fixture",
+        "model": "agentforge-fixture-policy-v1",
+        "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+        "started_at": "2026-11-08T16:46:54.595942Z",
+        "finished_at": "2026-11-08T16:46:56.734150Z",
+        "run_status": "passed",
+        "verification": {
+          "status": "passed",
+          "checks": [
+            {
+              "name": "file:coding:notes/execution.md",
+              "passed": true,
+              "detail": "37 bytes"
+            },
+            {
+              "name": "tool_calls:python_execute",
+              "passed": true,
+              "detail": "1 match(es)"
+            },
+            {
+              "name": "workflow",
+              "passed": true,
+              "detail": "completed"
+            }
+          ],
+          "failure_reason": null,
+          "manual_review_reason": null,
+          "details": {}
+        },
+        "workflow_id": "wf_5a0707c56e3247e99dc51bb4eb430dc0",
+        "workflow_status": "completed",
+        "workflow_error": null,
+        "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+        "metrics": {
+          "goal_success": true,
+          "workflow_completed": true,
+          "subtask_completion_rate": 1.0,
+          "end_to_end_seconds": 2.125,
+          "active_seconds": 2.062999999994645,
+          "human_wait_seconds": 0.0,
+          "llm_calls": 7,
+          "prompt_tokens": 20487,
+          "completion_tokens": 218,
+          "total_tokens": 20705,
+          "tool_calls": 2,
+          "tool_failures": 0,
+          "tool_failure_rate": 0.0,
+          "retry_count": 0,
+          "delegation_count": 0,
+          "delegation_success_rate": 0.0,
+          "memory_retrieval_count": 1,
+          "memory_usage_count": 0,
+          "approval_count": 0,
+          "clarification_count": 0,
+          "recovery_success": false,
+          "workflow_crash_or_timeout": false,
+          "tool_budget_exceeded": false,
+          "token_budget_exceeded": false,
+          "time_budget_exceeded": false,
+          "invalid_json_rate": 0.0,
+          "tool_schema_error_rate": 0.0,
+          "plan_validation_failure_rate": 0.0,
+          "tool_calling_success_rate": 1.0,
+          "agent_completion_rate": 1.0
+        },
+        "failure": null,
+        "human_interactions": [],
+        "config_snapshot": {
+          "mode": "multi_agent",
+          "provider_kind": "fixture",
+          "memory_evolution": false,
+          "memory_recall": true,
+          "time_budget_seconds": 120.0,
+          "token_budget": 200000,
+          "tool_budget": 15,
+          "max_delegation_depth": 2,
+          "allowed_tools": [
+            "python_execute",
+            "write_file",
+            "read_file"
+          ]
+        },
+        "artifacts": [
+          "coding/notes/execution.md"
+        ],
+        "notes": []
+      }
+    ]
+  },
+  "initial_memory_entries": 39,
+  "notes": [
+    "Same dataset, provider kind/model, temperature, tool framework and execution budgets across configurations.",
+    "Learning tasks for C are not included in evaluation aggregates.",
+    "C learning phase: 2 task(s), 2 passed."
+  ]
+}

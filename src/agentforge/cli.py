@@ -17,6 +17,7 @@ Commands:
   agentforge approvals ...        List/show/approve/reject human approvals
   agentforge clarification ...    List/show/answer clarification requests
   agentforge workflows ...        List/show/pause/resume/cancel workflows
+  agentforge benchmark ...        Benchmark, ablation, failure and live-acceptance tools
 """
 
 from __future__ import annotations
@@ -89,7 +90,7 @@ STATUS_STYLES = {
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agentforge",
-        description="AgentForge: multi-agent collaborative platform (Phase 4)",
+        description="AgentForge: multi-agent collaborative platform (Phase 5)",
     )
     parser.add_argument("--version", action="version", version=__version__)
     _add_common_options(parser)

@@ -1,0 +1,97 @@
+[
+  {
+    "run_id": "r_3b63f36db1b3410a",
+    "batch_id": "batch_cd99f7b4932f4c02b7338d4707fb158b",
+    "task_id": "research_manual_review",
+    "title": "Open-ended implications brief",
+    "category": "research",
+    "difficulty": "hard",
+    "repeat_index": 0,
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "benchmark-fixture",
+    "model": "agentforge-fixture-policy-v1",
+    "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+    "started_at": "2026-11-08T16:45:49.428056Z",
+    "finished_at": "2026-11-08T16:45:49.544368Z",
+    "run_status": "needs_review",
+    "verification": {
+      "status": "needs_review",
+      "checks": [
+        {
+          "name": "file:research:notes/open_brief.md",
+          "passed": true,
+          "detail": "260 bytes"
+        },
+        {
+          "name": "workflow",
+          "passed": true,
+          "detail": "completed"
+        }
+      ],
+      "failure_reason": null,
+      "manual_review_reason": "Open-ended analytical quality has no reliable automatic ground truth; a human must review the brief.",
+      "details": {}
+    },
+    "workflow_id": "wf_fa2e23727b404c2ab21d6735eb20b44c",
+    "workflow_status": "completed",
+    "workflow_error": null,
+    "final_result_preview": "# Benchmark final report\n\nWorkflow finalized.",
+    "metrics": {
+      "goal_success": false,
+      "workflow_completed": true,
+      "subtask_completion_rate": 1.0,
+      "end_to_end_seconds": 0.10899999999674037,
+      "active_seconds": 0.046000000002095476,
+      "human_wait_seconds": 0.0,
+      "llm_calls": 6,
+      "prompt_tokens": 15180,
+      "completion_tokens": 237,
+      "total_tokens": 15417,
+      "tool_calls": 1,
+      "tool_failures": 0,
+      "tool_failure_rate": 0.0,
+      "retry_count": 0,
+      "delegation_count": 0,
+      "delegation_success_rate": 0.0,
+      "memory_retrieval_count": 0,
+      "memory_usage_count": 0,
+      "approval_count": 0,
+      "clarification_count": 0,
+      "recovery_success": false,
+      "workflow_crash_or_timeout": false,
+      "tool_budget_exceeded": false,
+      "token_budget_exceeded": false,
+      "time_budget_exceeded": false,
+      "invalid_json_rate": 0.0,
+      "tool_schema_error_rate": 0.0,
+      "plan_validation_failure_rate": 0.0,
+      "tool_calling_success_rate": 1.0,
+      "agent_completion_rate": 1.0
+    },
+    "failure": {
+      "category": "manual_review_required",
+      "reason": "Open-ended analytical quality has no reliable automatic ground truth; a human must review the brief.",
+      "evidence": {},
+      "retryable": false
+    },
+    "human_interactions": [],
+    "config_snapshot": {
+      "mode": "multi_agent",
+      "provider_kind": "fixture",
+      "memory_evolution": false,
+      "memory_recall": false,
+      "time_budget_seconds": 60.0,
+      "token_budget": 200000,
+      "tool_budget": 15,
+      "max_delegation_depth": 2,
+      "allowed_tools": [
+        "write_file"
+      ]
+    },
+    "artifacts": [
+      "research/notes/open_brief.md"
+    ],
+    "notes": []
+  }
+]

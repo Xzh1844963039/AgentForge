@@ -1,10 +1,12 @@
-# AgentForge Architecture (Phase 1–4)
+# AgentForge Architecture (Phase 1–5)
 
 ## 1. Scope
 
 Phase 1 provides the multi-agent runtime; Phase 2 adds real tool execution and Docker
 sandbox isolation; Phase 3 adds evidence-first memory evolution, retrieval and feedback;
-Phase 4 adds persistent approvals/clarifications and workflow lifecycle control.
+Phase 4 adds persistent approvals/clarifications and workflow lifecycle control; Phase 5
+adds a standardized benchmark, ablation, failure-analysis and live-acceptance harness
+plus high-risk reconciliation state.
 The critical path is complete:
 
 - humans can talk privately to agents and publish goals to a group,
@@ -19,14 +21,18 @@ The critical path is complete:
 - destructive actions pause the real workflow until a parameter-bound human decision,
 - clarifications pause execution and resume with the persisted human answer,
 - workflows can be paused, resumed after restart and cancelled with cleanup,
+- high-risk effects with unknown audit outcomes enter `NEEDS_RECONCILIATION`,
 - results are synthesised, independently reviewed, and finalised,
+- benchmark tasks are executed in isolated runtimes and accepted by objective
+  verifiers, not model self-report,
 - every message, task transition, LLM call, tool call, HITL decision, memory event and
   metric is persisted.
 
 Phase 2 Docker sandbox verification: Docker Desktop 29.9.2, 4/4 integration tests,
-real prime-script execution. Phase 3 memory evolution and Phase 4 HITL are implemented
-and their pipelines are verified with Mock LLM decisions + real tools/state; real-LLM
-learning and HITL behavior are NOT VERIFIED. A web UI remains future work.
+real prime-script execution. Phase 3 memory evolution, Phase 4 HITL and Phase 5
+benchmarking are implemented and their pipelines are verified with Mock LLM
+decisions + real tools/state/verifiers. Real-LLM learning, HITL and benchmark
+performance are NOT VERIFIED. A web UI remains future work.
 
 ## 2. Layer diagram
 
@@ -81,8 +87,9 @@ abstractions. Only `runtime.py` wires concrete implementations together.
 | `models/` | Pydantic v2 contracts: messages, conversations, tasks, plans, actions, executions, workflows, agents. |
 | `config/` | `Settings` from environment/`.env`; safety limits; path resolution. |
 | `llm/` | `BaseLLMProvider`; async DeepSeek and HKGAI clients over an OpenAI-compatible protocol; deterministic mock; factory. |
-| `persistence/` | Thread-safe SQLite repository (including approvals, clarifications, workflow events) and append-only JSONL event logger. |
+| `persistence/` | Thread-safe SQLite repository (including approvals, clarifications, workflow events, reconciliation) and append-only JSONL event logger. |
 | `interaction/` | Persisted approval and clarification services plus the interaction repository. |
+| `benchmark/` | Benchmark schema/datasets, isolated runtime factory, objective verifiers, metrics, failure analyzer, runner, ablation and live acceptance. |
 | `memory/` | Per-agent memory interface; evidence-first evolution, provenance/verification, embeddings, task-scoped retrieval, candidates, decay, feedback and controlled experiment. |
 | `messaging/` | Conversation lifecycle and durable message routing/broadcasting. |
 | `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces, suspension), four roles, profile defaults, registry, prompt/action protocol. |
@@ -311,9 +318,12 @@ SQLite (WAL mode, thread-safe repository) stores:
   decision, expiry, consumption and comments.
 - `clarifications` — question, context, interpretations, status, answer and timestamps.
 - `workflow_events` — append-only lifecycle stream used for metrics and CLI.
+- `tool_reconciliations` — high-risk side-effect intent/audit status; unresolved rows
+  block replay.
 
 The separate memory database stores retrieval events and feedback with
-`workflow_id`, `task_id` and `execution_id`.
+`workflow_id`, `task_id` and `execution_id`. Benchmark batches store compact
+JSONL/JSON/CSV records outside the runtime database.
 
 `data/events.jsonl` is an append-only audit stream (`workflow_started`,
 `planning_attempt`, `goal_published`, `task_assigned`, `task_started`,
@@ -421,17 +431,21 @@ text command.
 Dispatcher pipeline:
 
 1. tool lookup;
-2. per-agent permission policy (default deny);
+2. task tool allow-list (benchmark) and per-agent permission policy (default deny);
 3. JSON-Schema argument validation;
 4. successful-effect replay lookup for resumed tasks;
-5. approval binding/expiry/one-time consumption, or persist a pending request and
+5. unresolved-reconciliation check: a high-risk effect with unknown audit outcome is
+   refused;
+6. approval binding/expiry/one-time consumption, or persist a pending request and
    suspend the task/workflow;
-6. timeout (`asyncio.wait_for`);
-7. tool execution with validated Pydantic arguments;
-8. structured exception handling;
-9. output schema validation;
-10. output size cap;
-11. SQLite `tool_calls` + JSONL audit.
+7. high-risk intent persistence before execution;
+8. timeout (`asyncio.wait_for`);
+9. tool execution with validated Pydantic arguments;
+10. structured exception handling;
+11. output schema validation;
+12. output size cap;
+13. SQLite `tool_calls` + JSONL audit; audit failure on an executed tool returns
+    `NEEDS_RECONCILIATION`.
 
 The result (success, error, timeout, denied, pending approval) is returned to the
 agent as `[TOOL_RESULTS]`, marked untrusted, and the agent continues reasoning. Tool
@@ -559,7 +573,41 @@ inside each task without changing the orchestration contract. A future
 `LangGraphOrchestrator` adapter can implement the same `run_goal` contract while
 reusing models, messaging, tools, sandboxing and persistence.
 
-## 18. Extension checklist
+## 18. Benchmark and reliability harness (Phase 5)
+
+The benchmark is outside the product runtime and uses only public/internal runtime
+boundaries:
+
+```text
+BenchmarkTask JSONL
+  → per-task isolated AgentForgeRuntime (DB, workspaces, memory, budgets)
+  → fixture or live LLM provider
+  → real tools / HITL / cancellation
+  → independent verifier (files, Docker-run Python, audit, state, graph)
+  → RunMetrics + FailureAnalysis
+  → JSONL/JSON/CSV + Markdown report
+```
+
+Key properties:
+
+- **Verifier authority:** `workflow.completed` is not success. Only `PASSED`
+  verifier checks count. Manual-review tasks do not inflate completion rate.
+- **Isolation:** each task run has its own SQLite store, workspace root, artifacts,
+  event log and (unless shared by an ablation) memory database.
+- **Fixture boundary:** deterministic fixture actions are labelled and used only to
+  validate the harness. Live tasks strip fixture actions; live calls require both a
+  key and explicit authorization.
+- **Single-agent baseline:** one Coordinator with the union of fleet capabilities,
+  through the same dispatcher, policy, sandbox and governance path (no reviewer).
+- **Ablation:** A/B/C use identical tasks, provider/model, temperature, tools and
+  budgets; C's learning runs are separate from evaluation tasks.
+- **Reliability:** high-risk tools persist intent before execution. If the final
+  audit cannot be persisted, `NEEDS_RECONCILIATION` blocks replay. No exactly-once
+  claim is made.
+- **Performance:** measured SQLite indexes and tool-catalog caching; Docker startup
+  is reported as a dominant cost rather than hidden.
+
+## 19. Extension checklist
 
 1. **New agent:** extend `AgentRole`, add a `BaseAgent` subclass with role
    instructions, register it, and grant capability/permission tokens.
@@ -577,5 +625,8 @@ reusing models, messaging, tools, sandboxing and persistence.
    final `ToolExecutor` check intact.
 7. **Concurrency:** execute independent ready tasks and independent tool calls with
    `asyncio.gather` while preserving state-machine, replay and audit semantics.
-8. **Evaluation:** add real-API, Docker, and live-search acceptance runs with clear
+8. **Benchmark:** add tasks via `benchmarks/dev/build_tasks.py`, always with an
+   objective verifier or explicit manual-review flag; never use fixture actions as
+   ground truth.
+9. **Evaluation:** add real-API, Docker, and live-search acceptance runs with clear
    PASS/SKIPPED/NOT VERIFIED reporting.

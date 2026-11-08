@@ -1,0 +1,39 @@
+{
+  "batch_id": "batch_bffd0fbdf2ce45ff97cf60ecf3a25387",
+  "dataset_id": "dev",
+  "dataset_path": "D:\\5202nlp课程project\\benchmarks\\dev",
+  "git_commit": "f4e8c4965e01279a621b37ea9045e8f93d1806c4",
+  "config": {
+    "dataset_path": "benchmarks/dev",
+    "output_dir": "benchmarks\\runs\\ablation_official\\ablation_20261109_004629_6x1\\learning",
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "mock",
+    "model": null,
+    "task_ids": [
+      "file_multi_artifact",
+      "file_revision_copy"
+    ],
+    "categories": [],
+    "repeats": 1,
+    "max_tasks": null,
+    "resume": false,
+    "batch_dir": null,
+    "live_api_allowed": false,
+    "memory_evolution": true,
+    "memory_recall": false,
+    "shared_memory_file": "benchmarks\\runs\\ablation_official\\ablation_20261109_004629_6x1\\shared_memory.db",
+    "learning_task_ids": [],
+    "fail_fast": false,
+    "verbose": false
+  },
+  "task_ids": [
+    "file_multi_artifact",
+    "file_revision_copy"
+  ],
+  "started_at": "2026-11-08T16:46:47.670433Z",
+  "finished_at": "2026-11-08T16:46:48.007461Z",
+  "status": "completed",
+  "run_count": 2,
+  "notes": ""
+}

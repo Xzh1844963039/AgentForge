@@ -1,8 +1,8 @@
 # AgentForge
 
-**A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, Docker sandbox isolation, and durable human-in-the-loop control.**
+**A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, Docker sandbox isolation, durable human-in-the-loop control, and a reproducible benchmark/ablation harness.**
 
-AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally: Phase 1 delivered the multi-agent runtime, Phase 2 the validated tool framework and Docker sandbox, Phase 3 evidence-first memory evolution, and Phase 4 persistent approvals, clarifications and workflow pause/resume/cancel.
+AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally: Phase 1 delivered the multi-agent runtime, Phase 2 the validated tool framework and Docker sandbox, Phase 3 evidence-first memory evolution, Phase 4 persistent approvals/clarifications and workflow control, and Phase 5 a standardized benchmark, ablation, fault-injection and live-acceptance harness.
 
 ## Current status
 
@@ -12,8 +12,21 @@ AgentForge is the final project for the HKUST NLP/Agent course. It is built incr
 | Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ complete; Docker integration verified (4/4) |
 | Phase 3 — Evidence-first memory evolution, procedural promotion, feedback, ablation | ✅ complete (pipeline verified; real-LLM learning NOT VERIFIED) |
 | Phase 4 — Human-in-the-loop, approvals, clarification, pause/resume/cancel, reassignment | ✅ complete (runtime verified; real-LLM HITL NOT VERIFIED) |
+| Phase 5 — Benchmark harness, 34-task dev set, ablation, reliability, performance | ✅ complete (fixture benchmark verified; live LLM NOT VERIFIED) |
+| Phase 6 — External integrations and real-provider hardening | ⏳ not started |
 
-**Verified on 2026-11-08:** `225 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **4/4 passed**; Ruff F/E9 clean. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM HITL and memory learning are **NOT VERIFIED** (no API key; deterministic Mock decisions drive the runtime).
+**Verified on 2026-11-09:** `242 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed** (4 Phase 2 + 1 Phase 5 container-death test); Ruff F/E9 clean; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM HITL, memory learning and live acceptance are **NOT VERIFIED** (no API key; no paid call made).
+
+Phase 5 highlights:
+
+- `BenchmarkRunner` runs one task or a whole dataset in per-task isolated databases/workspaces, with resumable batches and JSON/JSONL/CSV/Markdown exports.
+- 34 development tasks cover research, code generation, debugging, file editing, planning, delegation, code execution, approvals, clarification and failure recovery; every task has an objective verifier or an explicit manual-review requirement.
+- Python tasks are verified by independent Docker-run tests, not by agent prose; missing Docker is reported as skipped, never passed.
+- A/B/C ablation compares single-agent, multi-agent and multi-agent + memory under identical tasks, provider, budgets and verifiers.
+- Live acceptance requires an API key **and** explicit `--allow-live-api`; without both, all live checks are `NOT_VERIFIED` and a fixture harness check validates the plumbing.
+- High-risk tools persist an intent before execution. If the audit write fails after a side effect, the run enters `NEEDS_RECONCILIATION` and replay is blocked — no exactly-once claim.
+- Fault-injection tests cover invalid JSON, schema errors, repeated actions, timeouts, Docker death, cancellation, approval expiry, unanswered clarifications, delegation limits, SQLite outage, memory failure, process restart, effect replay and changed approval arguments.
+- SQLite query indexes and a tool-catalog cache were added with measured before/after data.
 
 Phase 4 highlights:
 
@@ -151,7 +164,34 @@ without memory. The verified run changes the tool argument from
 LLM decisions are a deterministic Mock policy, so the result proves the memory
 pipeline, **not real-LLM learning performance**.
 
-### 8. Run the tests
+### 8. Run the Phase 5 benchmark (no API key; Docker for Python checks)
+
+```powershell
+python -m agentforge benchmark list --dataset benchmarks/dev
+python -m agentforge benchmark run --dataset benchmarks/dev --output-dir benchmarks/runs/dev_full
+python -m agentforge benchmark compare --dataset benchmarks/dev --output-dir benchmarks/runs/ablation_official
+python -m agentforge benchmark live --provider deepseek --output-dir benchmarks/runs/live_official
+```
+
+The first command lists 34 development tasks. `run` creates isolated per-task
+databases/workspaces and writes `report.md`, `runs.jsonl`, `runs.json`,
+`runs.csv` and `failures.json`. `compare` runs the A/B/C ablation.
+`live` without a key and explicit `--allow-live-api` performs **no paid API
+call**; it records all live checks as `NOT_VERIFIED` and validates the harness
+with a three-task fixture run.
+
+The fixture provider is a deterministic harness driver. Fixture benchmarks prove
+that the runtime, tools, verifiers, budgets and reporting work; they do **not**
+measure real-LLM capability. Python tasks are verified with independent real
+Docker tests.
+
+Performance evidence:
+
+```powershell
+python benchmarks/performance/measure.py
+```
+
+### 9. Run the tests
 
 ```powershell
 pytest -q
@@ -161,13 +201,13 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-225 passed, 2 skipped
+242 passed, 2 skipped
 ```
 
-The Phase 4 tests exercise approvals, expiry and binding, clarifications,
-pause/resume/cancel, restart recovery, duplicate-side-effect prevention,
-role-permission boundaries, rejection/reassignment, two-level delegation,
-task-scoped memory feedback, CLI commands and the new metrics.
+The Phase 5 tests exercise 34 dataset tasks, objective verification, batch
+resume and exports, single-agent baseline, ablation, live no-key safety, and
+fault injection including the audit-write reconciliation window. Phase 4 tests
+remain active.
 
 Optional coverage:
 
@@ -319,6 +359,12 @@ agentforge clarification answer        Answer a clarification
 agentforge workflows list/show         Inspect workflow and lifecycle events
 agentforge workflows pause/resume      Pause or resume a workflow
 agentforge workflows cancel            Cancel and clean up a workflow
+agentforge benchmark list              List internal benchmark tasks
+agentforge benchmark run               Run one/all tasks, resumable and exported
+agentforge benchmark compare           Run A/B/C ablation
+agentforge benchmark report            Regenerate Markdown report
+agentforge benchmark failures          Show classified failures
+agentforge benchmark live              Real-LLM acceptance (explicit opt-in)
 ```
 
 Agent IDs: `coordinator`, `research`, `coding`, `reviewer`.
@@ -452,6 +498,53 @@ See [docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md),
 
 ---
 
+## Benchmarking at a glance
+
+Phase 5 adds a reproducible evaluation harness independent of the product CLI:
+
+```text
+BenchmarkDataset (34 JSONL tasks)
+  → isolated runtime per task (DB, workspace, memory, budgets)
+  → real tools / Docker / HITL state machine
+  → independent verifier (file, Python, audit, workflow, graph, manual review)
+  → per-run metrics + failure classification
+  → JSONL / JSON / CSV / Markdown batch record
+```
+
+The internal dev set covers all ten required categories with basic and hard
+tasks: research, Python generation, debugging, file editing, planning,
+delegation, execution/testing, approval, clarification and failure recovery.
+Success is never inferred from `workflow.completed` or model self-report.
+
+Verified fixture result (harness validation, **not LLM performance**):
+
+```text
+34 runs: 33 verified passes, 1 needs-review, 0 failures, 0 skips
+verified completion: 97.1%
+average E2E: 0.722s; median 0.125s; p95 2.234s
+```
+
+Ablation with identical tasks/provider/budgets:
+
+| Config | Passed | Avg E2E | Avg tokens |
+|---|---:|---:|---:|
+| Single agent | 6/6 | 1.104s | 15,819 |
+| Multi-agent | 6/6 | 1.112s | 19,085 |
+| Multi-agent + memory | 6/6 | 1.135s | 20,098 |
+
+The fixture policy is deterministic and does not consult memory for answers, so
+the ablation validates plumbing and measures coordination overhead only. Live
+LLM checks remain **NOT_VERIFIED** until a key and explicit `--allow-live-api`
+are supplied.
+
+See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md),
+[docs/EVALUATION_METRICS.md](docs/EVALUATION_METRICS.md),
+[docs/ABLATION_STUDY.md](docs/ABLATION_STUDY.md),
+[docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md) and
+[docs/PHASE5_REPORT.md](docs/PHASE5_REPORT.md).
+
+---
+
 ## Project layout
 
 ```text
@@ -464,17 +557,24 @@ See [docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md),
 │   ├── tools/           dispatcher, policy, approvals, file/artifact/Python/search/Git tools
 │   ├── sandbox/         Docker sandbox, command runner, manager
 │   ├── interaction/     approval/clarification services and HITL repository
+│   ├── benchmark/       schema, datasets, verifiers, metrics, runner, ablation, live
 │   ├── memory/          evidence-first evolution, embeddings, retrieval, feedback, experiment
 │   ├── models/          Pydantic contracts (messages, tasks, tools, workflows, approvals)
-│   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, HITL tables)
+│   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, HITL, reconciliation)
 │   ├── evaluation/      workflow metrics including HITL and tool usage
 │   ├── config/          centralized environment settings
 │   ├── runtime.py       dependency wiring and public API
 │   ├── cli.py           CLI and REPL
-│   └── cli_memory.py    memory list/search/stats/clear/experiment
-├── tests/               227 collected: unit, integration, protocol, HITL, CLI, Docker-gated
+│   ├── cli_memory.py    memory list/search/stats/clear/experiment
+│   └── cli_benchmark.py benchmark CLI commands
+├── benchmarks/
+│   ├── dev/             34 internal tasks + reproducible generator
+│   ├── live/            8 live-acceptance tasks + generator
+│   ├── performance/     before/after microbenchmarks
+│   └── runs/            compact batch records (workspaces/DBs ignored)
+├── tests/               244 collected: unit, integration, protocol, HITL, benchmark, CLI, Docker
 ├── examples/            mock/file-tool/memory/Phase-4 HITL demos, real-provider example
-├── docs/                architecture, plan, Phase 1–4 reports, tool/sandbox/memory/HITL docs
+├── docs/                architecture, plan, Phase 1–5 reports, tools/sandbox/memory/HITL/benchmark
 ├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
 ├── .env.example
 ├── pyproject.toml
@@ -486,20 +586,22 @@ See [docs/HITL_ARCHITECTURE.md](docs/HITL_ARCHITECTURE.md),
 ## Persistence and observability
 
 SQLite tables: `conversations`, `messages`, `tasks`, `agent_executions`, `workflows`,
-`memory_entries`, `tool_calls`, `artifacts`, `approvals`, `clarifications` and
-`workflow_events` (schema version 3).
+`memory_entries`, `tool_calls`, `artifacts`, `approvals`, `clarifications`,
+`workflow_events` and `tool_reconciliations` (schema version 4). Benchmark batches
+add compact JSONL/JSON/CSV records outside the runtime database.
 
 Each tool call records: agent, workflow, task, tool name, arguments, status, output,
 error, duration, permission decision, approval status/id, permissions, timestamps
 and metadata. Approval rows retain the reviewed arguments, digest, risk, expiry,
 decision, comment and one-time consumption time. Clarification rows retain the
-question, context, interpretations and answer. JSONL events mirror lifecycle, HITL
-and tool activity.
+question, context, interpretations and answer. Reconciliation rows retain the
+high-risk intent/audit state. JSONL events mirror lifecycle, HITL and tool activity.
 
 Metrics include completion rate, workflow/task duration, LLM calls, tokens, tool
 calls/failures/time, delegation count/depth/success, reassignments, approval
 outcomes and wait time, clarification count/wait time, and pause/resume/cancel
-counts.
+counts. Benchmark metrics add verified goal success, active vs simulated human
+wait, token/tool budgets, retries, memory retrieval/use and live-behavior rates.
 
 ---
 
@@ -517,26 +619,32 @@ Implemented:
 - Deterministic task replay and a successful-effect replay cache to prevent duplicate side effects.
 - Structured tool evidence from the SQLite audit is propagated into synthesis, review and final report prompts.
 - Task-scoped memory retrieval and feedback (workflow/task/execution IDs).
-- SQLite + JSONL observability, expanded metrics, CLI/REPL, deterministic demos, 225 passing tests.
+- 34-task objective benchmark, resumable runner, JSON/JSONL/CSV/Markdown exports.
+- A/B/C ablation, failure taxonomy, live-acceptance framework and 8 live tasks.
+- High-risk execute-vs-audit reconciliation (`NEEDS_RECONCILIATION`), blocking blind replay.
+- Fault-injection coverage and measured SQLite/catalog optimizations.
+- SQLite + JSONL observability, expanded metrics, CLI/REPL, deterministic demos, 242 passing tests.
 
 Not implemented / pending:
 
 - **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
 - **Real remote Git push** — only a temporary local bare remote was tested; approval prevents unapproved pushes.
-- **Real LLM tool-calling and HITL** — no DeepSeek/HKGAI key; Mock decisions are deterministic fixtures.
-- **Real-LLM memory learning performance and resume behavior** — NOT VERIFIED; Phase 3/4 use deterministic Mock decision policies with real tools/state.
-- **Web UI**, parallel tool execution, preemptive mid-tool interruption, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
+- **Real LLM tool-calling, HITL and benchmark acceptance** — no DeepSeek/HKGAI key; no paid call made. Live checks are `NOT_VERIFIED`.
+- **Real-LLM memory learning and live memory reuse** — NOT VERIFIED; fixture ablation validates plumbing only.
+- **Real-user HITL** — human benchmark scripts are explicitly simulated.
+- **Reconciliation resolution UI** — unresolved high-risk side effects require manual reconciliation; no resolution workflow yet.
+- **Web UI**, preemptive mid-tool interruption, bounded DAG concurrency, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
 
 ---
 
 ## Docker verification
 
-Verified on 2026-11-08 with Docker Desktop 29.9.2:
+Verified on 2026-11-09 with Docker Desktop 29.9.2:
 
 ```powershell
 docker info
 python -m pytest -m docker -q
-# 4 passed in 18.33s
+# 5 passed in 21.72s
 
 python -m agentforge demo-tools
 # exit 0; real stdout:
@@ -547,7 +655,7 @@ docker ps -a
 # no AgentForge containers left
 ```
 
-The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 4 suite is `225 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 5 suite is `242 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Benchmark Python tasks additionally execute their generated code and independent verifier tests in Docker.
 
 The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 
@@ -581,10 +689,15 @@ The final report is grounded in the persisted `tool_calls` audit: stdout, stderr
 - [docs/APPROVAL_SYSTEM.md](docs/APPROVAL_SYSTEM.md)
 - [docs/WORKFLOW_LIFECYCLE.md](docs/WORKFLOW_LIFECYCLE.md)
 - [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md)
+- [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md)
+- [docs/EVALUATION_METRICS.md](docs/EVALUATION_METRICS.md)
+- [docs/ABLATION_STUDY.md](docs/ABLATION_STUDY.md)
+- [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md)
 - [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md)
 - [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md)
 - [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md)
 - [docs/PHASE4_REPORT.md](docs/PHASE4_REPORT.md)
+- [docs/PHASE5_REPORT.md](docs/PHASE5_REPORT.md)
 - [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)
 
 ## License
