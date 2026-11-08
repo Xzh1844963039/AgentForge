@@ -10,10 +10,10 @@ AgentForge is the final project for the HKUST NLP/Agent course. It is built incr
 |---|---|
 | Phase 1 — Runtime, messaging, DAG orchestration, persistence, CLI | ✅ complete |
 | Phase 2 — Tool dispatch, private workspaces, Docker sandbox, Python/Search/Git tools | ✅ complete; Docker integration verified (4/4) |
-| Phase 3 — Memory evolution | ⏳ next |
-| Phase 4 — Full human-in-the-loop | ⏳ planned |
+| Phase 3 — Evidence-first memory evolution, procedural promotion, feedback, ablation | ✅ complete (pipeline verified; real-LLM learning NOT VERIFIED) |
+| Phase 4 — Full human-in-the-loop | ⏳ next |
 
-**Verified on 2026-11-08:** `186 passed, 2 skipped` in the full pytest suite with Docker running, `78%` statement coverage, Ruff F/E9 clean. The 2 skips are one Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Docker integration: **4/4 passed**.
+**Verified on 2026-11-08:** `205 passed, 2 skipped` in the full pytest suite with Docker running, `78%` statement coverage (`93%` for `agentforge.memory`), Ruff F/E9 clean. The 2 skips are one Windows symlink-privilege test and the Docker-missing failure-path test. Docker integration: **4/4 passed**. Real-LLM memory learning is **NOT VERIFIED** (no API key).
 
 Phase 2 highlights:
 
@@ -26,6 +26,10 @@ Phase 2 highlights:
 - Local `git_status/diff/log/add/commit/push` with parameterized commands, repository scoping, credential scrubbing, and a mandatory approval gate for push.
 - Controlled cross-agent artifact transfer; direct workspace reads are impossible.
 - Tool calls are persisted in SQLite and shown by the CLI (`tools`, `tool-calls`).
+- Evidence-first memory evolution with episodic/semantic/procedural/working types,
+  audited provenance, verification levels, embedding retrieval, decay/forgetting,
+  procedural promotion, retrieval feedback and a controlled with/without-memory
+  experiment.
 
 ---
 
@@ -98,7 +102,20 @@ Goal:
 
 The CodingAgent calls `python_syntax_check` and `python_execute`; the script runs inside the non-root, network-disabled Docker sandbox. stdout, stderr, exit code, script path and tool audit are shown. **If Docker is unavailable, `demo-tools` exits with code 2 and prints the prerequisite; there is no host fallback.**
 
-### 6. Run the tests
+### 6. Run the Phase 3 memory experiment (no Docker required)
+
+```powershell
+python -m agentforge memory experiment
+```
+
+This runs two learning workflows with REAL private-workspace file tools, promotes a
+procedural memory after two distinct real workflows, then runs the same task with and
+without memory. The verified run changes the tool argument from
+`notes/default.md` to `notes/verified.md` and records `used=True success=True` feedback.
+LLM decisions are a deterministic Mock policy, so the result proves the memory
+pipeline, **not real-LLM learning performance**.
+
+### 7. Run the tests
 
 ```powershell
 pytest -q
@@ -108,14 +125,15 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-186 passed, 2 skipped
+205 passed, 2 skipped
 ```
 
 Optional coverage:
 
 ```powershell
 pytest --cov=agentforge --cov-report=term -q
-# TOTAL: 4835 statements, 1062 missed, 78% coverage
+# TOTAL: 5977 statements, 1326 missed, 78% coverage
+# agentforge.memory: 93% coverage
 ```
 
 ---
@@ -194,6 +212,30 @@ AGENTFORGE_GIT_TIMEOUT=30
 
 Git tools are disabled when no authorized root is configured. Commands use argument lists (no shell), explicit file scopes for add/commit, and a credential-scrubbed environment. `git_push` always requires approval; the default gate returns `PENDING_APPROVAL` and performs no push. No real remote is pushed by tests; the push test uses a temporary local bare repository.
 
+### Memory evolution
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AGENTFORGE_MEMORY_EVOLUTION_ENABLED` | `true` | Reflect on workflows after completion |
+| `AGENTFORGE_MEMORY_RECALL_ENABLED` | `true` | Allow agents to retrieve memory |
+| `AGENTFORGE_MEMORY_FILE` | `<data>/memory_evolution.db` | Separate memory database |
+| `AGENTFORGE_MEMORY_RECALL_LIMIT` | `6` | Max entries per prompt |
+| `AGENTFORGE_MEMORY_PROMPT_BUDGET_CHARS` | `3000` | Prompt budget |
+| `AGENTFORGE_MEMORY_INCLUDE_MOCK` | `false` | Include Mock memories (default deny) |
+| `AGENTFORGE_MEMORY_INCLUDE_UNVERIFIED` | `false` | Include unverified memories |
+| `AGENTFORGE_MEMORY_PROMOTION_THRESHOLD` | `2` | Distinct real workflows needed |
+| `AGENTFORGE_MEMORY_PROMOTION_CONFIDENCE` | `0.8` | Minimum promotion confidence |
+| `AGENTFORGE_MEMORY_DECAY_HALF_LIFE_DAYS` | `30` | Importance half-life |
+| `AGENTFORGE_MEMORY_FORGET_THRESHOLD` | `0.05` | Forgetting threshold |
+| `AGENTFORGE_MEMORY_WORKING_TTL_SECONDS` | `3600` | Working-memory TTL |
+| `AGENTFORGE_MEMORY_EMBEDDING_DIMENSIONS` | `256` | Local hashing vector size |
+| `AGENTFORGE_MEMORY_STORE_MOCK_PROCEDURES` | `true` | Store provisional Mock procedures |
+
+Memory is evidence-first: entries reference persisted `tool_calls` IDs and carry
+`REAL_EXECUTION`, `MOCK_SIMULATION`, or `UNVERIFIED`. Only real evidence with repeated
+support becomes high-confidence procedural memory. See
+[docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md).
+
 ---
 
 ## CLI reference
@@ -207,6 +249,8 @@ agentforge repl                        Interactive shell
 agentforge agents                      Agent list and capabilities
 agentforge tools                       Tool contracts, permissions, timeouts
 agentforge tool-calls                  Tool audit records
+agentforge memory list/search/stats    Phase 3 memory inspection
+agentforge memory experiment           Controlled with/without-memory ablation
 agentforge tasks [--workflow ID]       Task status
 agentforge conversations               Conversation list
 agentforge messages [--all]            Messages / transcript replay
@@ -282,6 +326,30 @@ See [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md) for the threat model, f
 
 ---
 
+## Memory evolution at a glance
+
+Phase 3 memory is derived from the SQLite `tool_calls` audit, not chat text. Each
+entry records workflow/task/tool-call provenance and a verification level. Only
+`REAL_EXECUTION` procedures supported by at least two distinct workflows are promoted
+to high confidence; Mock evidence remains provisional and is excluded from default
+retrieval.
+
+The controlled experiment runs two learning workflows with real file tools, promotes a
+procedure, then runs the same task with and without memory. In the verified run:
+
+```text
+with memory:    write_file(path="notes/verified.md")
+without memory: write_file(path="notes/default.md")
+action changed: YES
+feedback:       used=True success=True delta=+0.03
+real LLM learning effect: NOT VERIFIED (Mock decision policy)
+```
+
+See [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md) and
+[docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md).
+
+---
+
 ## Project layout
 
 ```text
@@ -293,16 +361,17 @@ See [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md) for the threat model, f
 │   ├── llm/             provider interface, DeepSeek, HKGAI, mock
 │   ├── tools/           dispatcher, policy, approvals, file/artifact/Python/search/Git tools
 │   ├── sandbox/         Docker sandbox, command runner, manager
-│   ├── memory/          per-agent memory interfaces
+│   ├── memory/          evidence-first evolution, embeddings, retrieval, feedback, experiment
 │   ├── models/          Pydantic contracts (messages, tasks, tools, workflows)
 │   ├── persistence/     SQLite repository (tasks, tool_calls, artifacts, ...)
 │   ├── evaluation/      workflow metrics including tool usage
 │   ├── config/          centralized environment settings
 │   ├── runtime.py       dependency wiring and public API
-│   └── cli.py           CLI and REPL
-├── tests/               188 collected: unit, integration, protocol, CLI, Docker-gated
-├── examples/            mock demo, file-tool demo, real-provider example
-├── docs/                architecture, plan, Phase 1/2 reports, tool & sandbox security
+│   ├── cli.py           CLI and REPL
+│   └── cli_memory.py    memory list/search/stats/clear/experiment
+├── tests/               207 collected: unit, integration, protocol, CLI, Docker-gated
+├── examples/            mock/file-tool/memory demos, real-provider example
+├── docs/                architecture, plan, Phase 1/2/3 reports, tool/sandbox/memory docs
 ├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
 ├── .env.example
 ├── pyproject.toml
@@ -331,15 +400,15 @@ Implemented:
 - Private file tools, artifacts, Docker sandbox, Python execution (Docker-gated), search providers, local Git tools.
 - Approval gates for file deletion and git push (default: pending).
 - Structured tool evidence from the SQLite audit is propagated into synthesis, review and final report prompts.
-- SQLite + JSONL observability, CLI, deterministic demos, 186 passing tests.
+- SQLite + JSONL observability, CLI, deterministic demos, 205 passing tests.
 
 Not implemented / pending:
 
 - **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
 - **Real remote Git push** — only a temporary local bare remote was tested; default approval gate prevents pushes.
 - **Real LLM tool-calling** — no DeepSeek/HKGAI key; mock decisions are deterministic fixtures.
-- **Memory evolution** — reflection, decay, consolidation, semantic retrieval are Phase 3.
-- **Full HITL** — interactive approval/pause/resume is Phase 4; Phase 2 only has a gate interface.
+- **Real-LLM memory learning performance** — NOT VERIFIED; the Phase 3 experiment uses a deterministic Mock decision policy and real file tools.
+- **Full HITL** — interactive approval/pause/resume is Phase 4.
 - **Web UI**, parallel tool execution, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
 
 ---
@@ -362,7 +431,7 @@ docker ps -a
 # no AgentForge containers left
 ```
 
-The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full suite is `186 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 3 suite is `205 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available).
 
 The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 
@@ -389,8 +458,10 @@ The final report is grounded in the persisted `tool_calls` audit: stdout, stderr
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/TOOL_SYSTEM.md](docs/TOOL_SYSTEM.md)
 - [docs/SANDBOX_SECURITY.md](docs/SANDBOX_SECURITY.md)
+- [docs/MEMORY_SYSTEM.md](docs/MEMORY_SYSTEM.md)
 - [docs/PHASE1_REPORT.md](docs/PHASE1_REPORT.md)
 - [docs/PHASE2_REPORT.md](docs/PHASE2_REPORT.md)
+- [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md)
 - [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)
 
 ## License

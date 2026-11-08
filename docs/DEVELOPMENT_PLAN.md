@@ -121,40 +121,90 @@ passes with real file writes/reads and two audited tool calls.
 
 ---
 
-## Phase 3 — Memory evolution and experience reuse (next)
+## Phase 3 — Memory evolution and experience reuse ✅ Complete (pipeline verified)
 
-**Goal:** turn per-agent episodic storage into an evolving, useful memory system.
+**Goal:** turn per-agent episodic storage into an evolving, evidence-based memory
+system, without modifying the Phase 2 tool/sandbox/orchestrator core.
 
-### Deliverables
+### Delivered
 
-1. **Memory taxonomy:** episodic, semantic, procedural, working memory.
-2. **Reflection:** summarise what worked/failed and which strategy should be reused.
-3. **Importance and decay:** salience scoring, decay, consolidation, forgetting.
-4. **Retrieval:** embedding-based semantic search with per-agent namespace isolation;
-   keyword/recency fallback; token-budgeted prompt injection.
-5. **Experience reuse:** retrieve relevant procedures before planning and record
-   whether reuse helped.
-6. **Evaluation:** repeated-task benchmark, memory ablation, contamination checks.
-7. **CLI:** memory list/search/stats/clear per agent and namespace.
+- Memory taxonomy: `EPISODIC`, `SEMANTIC`, `PROCEDURAL`, `WORKING`.
+- Evidence-first reflection from SQLite `tool_calls` and `ToolEvidence`, never chat
+  text.
+- `MemorySource` provenance: workflow/task/tool-call IDs, evidence digest, LLM
+  provider/mock flag, real vs mock tool execution.
+- Verification levels: `REAL_EXECUTION`, `MOCK_SIMULATION`, `UNVERIFIED`.
+- Procedural candidates keyed by agent/capabilities/kind/tool sequence/arguments;
+  `support_count` counts distinct workflows.
+- Promotion only for REAL_EXECUTION with ≥2 distinct workflows and confidence ≥0.8.
+- Mock procedures stored only as provisional/low-confidence and excluded from default
+  retrieval.
+- Local hashing embedding retrieval + keyword/importance fallback, verification
+  filtering, provenance prefixes and prompt budget.
+- Per-agent + namespace isolation; no cross-agent recall.
+- Importance decay, dedupe/consolidation, working-memory TTL, forgetting.
+- Retrieval feedback matched to real tool actions; confidence increases/decreases.
+- Controlled with/without-memory experiment; same task/model/tools/budget, only
+  recall differs.
+- CLI: `memory list/search/stats/candidates/feedback/clear/experiment`.
+- Separate `memory_evolution.db`; Phase 2 audit tables untouched.
+- Docs: `MEMORY_SYSTEM.md`, `PHASE3_REPORT.md`.
+
+### Verification
+
+```text
+pytest -q
+205 passed, 2 skipped in 66.26s
+
+pytest --cov=agentforge --cov-report=term -q
+TOTAL: 5977 statements, 1326 missed, 78% coverage
+agentforge.memory: 93% coverage
+
+experiment:
+  candidate support = 2
+  promoted verification = REAL_EXECUTION, confidence 0.85
+  with memory = notes/verified.md; without memory = notes/default.md
+  procedural retrieved with=True without=False
+  action_changed = True
+  feedback used/success = True/+0.03
+  pipeline_verified = True
+  real LLM learning = NOT VERIFIED
+```
 
 ### Acceptance criteria
 
-- Each agent retrieves only its own memories.
-- Memory writes/reads survive restart.
-- Repeated similar tasks show documented improvement or a faster path.
-- Reflection stores provenance (task/workflow).
-- Tests cover decay, ranking, isolation, consolidation, and failure recovery.
-- Docs clearly separate implemented evolution from aspirational claims.
+| Criterion | Result |
+|---|---|
+| Memory built on Tool Audit | ✅ |
+| Source/verification recorded | ✅ |
+| Only real evidence becomes high-confidence procedural | ✅ |
+| Mock pipeline validation without real-learning claim | ✅ |
+| Retrieval changes subsequent action | ✅ real file-tool path change |
+| Controlled ablation | ✅ same model/task/tools/budget |
+| Agent/namespace isolation | ✅ |
+| Decay/consolidation/forgetting | ✅ |
+| Real-API performance | ⏳ NOT VERIFIED |
+
+### Open items / limitations
+
+- Real-LLM memory learning performance NOT VERIFIED (no API key).
+- Local hashing embeddings, not a learned semantic model; quality not benchmarked.
+- Procedural matching is exact on sequence/argument hints; fuzzy transfer future.
+- Feedback uses task time windows; concurrent tasks need task-scoped retrieval.
+- No cross-agent memory sharing by design.
+- Optional embedding provider/API is future work.
 
 ### Risks
 
-- Memory pollution and prompt bloat; thresholds, budgets, provenance.
-- Evaluation noise in mock mode; real-API runs must be labelled separately.
-- Embedding cost; optional provider and caching.
+- Memory pollution and prompt bloat; mitigated by verification gates, support
+  thresholds, prompt budget and forgetting.
+- Mock evidence contamination; mitigated by provisional low-confidence state and
+  default exclusion.
+- Exact-match rigidity; evaluated only on repeated tasks in this phase.
 
 ---
 
-## Phase 4 — Full human-in-the-loop, permissions, pause/resume
+## Phase 4 — Full human-in-the-loop, permissions, pause/resume (next)
 
 **Goal:** put the human in control of risky, ambiguous, or long-running work.
 
@@ -277,11 +327,11 @@ passes with real file writes/reads and two audited tool calls.
 
 ## Recommended next step
 
-Proceed to **Phase 3 — Memory Evolution**, then Phase 4 HITL:
+Proceed to **Phase 4 — Human-in-the-Loop, permissions and pause/resume**:
 
-1. extend `MemoryStore` with reflection/salience/decay without changing agents,
-2. add embedding-based retrieval behind a configurable interface,
-3. build a repeated-task experiment to measure experience reuse,
-4. keep deterministic mock tests,
-5. before production-like use, run the Docker verification suite on a Docker-enabled
-   Windows/WSL2 machine.
+1. connect `ApprovalGate` to interactive CLI approvals;
+2. add clarification requests and resumable BLOCKED tasks;
+3. add pause/resume/cancel with durable checkpoints;
+4. enforce per-agent permission scopes in the tool executor;
+5. preserve memory evidence/feedback contracts across pauses;
+6. keep real-LLM memory performance explicitly NOT VERIFIED until API acceptance runs.

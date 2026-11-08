@@ -1,9 +1,10 @@
-# AgentForge Architecture (Phase 1–2)
+# AgentForge Architecture (Phase 1–3)
 
 ## 1. Scope
 
 Phase 1 provides the multi-agent runtime; Phase 2 adds real tool execution and Docker
-sandbox isolation. The critical path is complete:
+sandbox isolation; Phase 3 adds evidence-first memory evolution, retrieval and feedback.
+The critical path is complete:
 
 - humans can talk privately to agents and publish goals to a group,
 - a Coordinator dynamically plans a task graph with the configured LLM,
@@ -12,13 +13,16 @@ sandbox isolation. The critical path is complete:
 - agents can request real tools (files, sandboxed Python, search, local Git) through a
   unified dispatcher and reason over the structured results,
 - every tool call is schema-validated, permission-checked, timed out and audited,
+- memories are derived from the tool audit with verification levels and provenance,
+- retrieval feeds agents, changes actions, and receives outcome feedback,
 - results are synthesised, independently reviewed, and finalised,
-- every message, task transition, LLM call, tool call, and metric is persisted.
+- every message, task transition, LLM call, tool call, memory event and metric is
+  persisted.
 
-Phase 2 provides the Docker sandbox implementation and it is verified on this machine
-(Docker Desktop 29.9.2; 4/4 integration tests; real prime-script execution).
-Full HITL, memory evolution, and a web UI remain future phases; interfaces and TODO
-markers are explicit.
+Phase 2 Docker sandbox verification: Docker Desktop 29.9.2, 4/4 integration tests,
+real prime-script execution. Phase 3 memory evolution is implemented and its
+pipeline is verified with Mock LLM decisions + real file tools; real-LLM learning
+performance is NOT VERIFIED. Full HITL and a web UI remain future phases.
 
 ## 2. Layer diagram
 
@@ -53,7 +57,8 @@ markers are explicit.
 ├─────────────────────────────────────────────────────────────────────────┤
 │ SandboxManager → DockerSandbox / private workspace per agent            │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ LLM providers (DeepSeek / HKGAI / Mock) │ Memory │ SQLite │ JSONL       │
+│ LLM providers (DeepSeek / HKGAI / Mock) │ MemoryEvolutionEngine        │
+│ EvolutionMemoryStore (separate DB) │ SQLite audit │ JSONL              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,7 +74,7 @@ abstractions. Only `runtime.py` wires concrete implementations together.
 | `config/` | `Settings` from environment/`.env`; safety limits; path resolution. |
 | `llm/` | `BaseLLMProvider`; async DeepSeek and HKGAI clients over an OpenAI-compatible protocol; deterministic mock; factory. |
 | `persistence/` | Thread-safe SQLite repository and append-only JSONL event logger. |
-| `memory/` | Per-agent memory interface; in-memory and SQLite implementations; keyword+recency recall. |
+| `memory/` | Per-agent memory interface; evidence-first evolution, provenance/verification, embeddings, retrieval, candidates, decay, feedback and controlled experiment. |
 | `messaging/` | Conversation lifecycle and durable message routing/broadcasting. |
 | `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces), four roles, profile defaults, registry, prompt/action protocol. |
 | `orchestration/` | Plan validation, capability matching, task state machine, DAG executor, budgets, metrics integration. |
@@ -328,25 +333,47 @@ raw metadata.
 Provider construction validates credentials. Selecting a real provider without a key
 raises `ProviderConfigurationError`; the runtime never silently switches to mock.
 
-## 10. Memory design
+## 10. Memory evolution (Phase 3)
 
-Per-agent isolation is enforced in two dimensions: `agent_id` and `namespace`.
-Current memory namespaces:
+Memory is agent-scoped and namespace-scoped; queries always filter by `agent_id` and
+optionally namespace. The original `MemoryStore` interface is preserved, so agents do
+not need a Phase 3-specific API.
 
-- `experience` — one compact memory per task outcome, including kind/action/result.
-- `conversation` — private chat summaries.
+Evidence flow:
 
-Recall combines token overlap with recency/importance. Every agent receives only its
-own memories in its prompt.
+```text
+SQLite tool_calls audit → ToolEvidence
+  → deterministic reflection
+  → episodic / semantic / working memories
+  → procedural candidate (tool sequence + argument hints)
+  → promotion only for REAL_EXECUTION with ≥2 distinct workflows and confidence ≥0.8
+  → EvolutionMemoryStore.recall (embedding + keyword + decay + verification)
+  → [RELEVANT_MEMORY] in agent prompt
+  → real tool action → retrieval feedback → confidence update
+```
 
-Phase 3 extension points (already isolated behind `MemoryStore`):
+Verification levels:
 
-- reflection summaries and strategy extraction,
-- importance scoring and decay,
-- forgetting/consolidation,
-- embedding-based semantic retrieval,
-- procedural memory reuse across workflows,
-- measurable memory-evolution experiments.
+- `REAL_EXECUTION` — all referenced tool calls succeeded and came from real tools, with
+  persisted tool-call IDs;
+- `MOCK_SIMULATION` — at least one mock/simulated tool or synthetic evidence; stored
+  as provisional and excluded from default recall;
+- `UNVERIFIED` — missing/failed/incomplete audit or legacy chat/task memory.
+
+`llm_is_mock` is recorded separately from `tool_execution`: a deterministic Mock LLM
+decision can coexist with real file/Python execution evidence.
+
+Storage is a separate `memory_evolution.db`; Phase 2 tool/sandbox/orchestrator code is
+unchanged. Runtime adds the store/engine and a post-workflow hook. Retrieval uses a
+deterministic local hashing embedding (learned-embedding quality NOT VERIFIED), caps
+prompt characters, labels verification, and records retrieval events. Feedback matches
+task tool calls to retrieved procedures and adjusts confidence. Decay, consolidation,
+working-memory TTL and forgetting are implemented.
+
+A controlled experiment compares the same task/model/tools/budget with and without
+memory: the promoted procedure changes `write_file` from `notes/default.md` to
+`notes/verified.md`. This verifies the pipeline with Mock LLM decisions; real-LLM
+learning performance is NOT VERIFIED.
 
 ## 11. Tool execution architecture
 
@@ -481,8 +508,8 @@ reusing models, messaging, tools, sandboxing and persistence.
    add schema/success/failure/audit tests.
 4. **New sandbox backend:** implement `BaseSandbox` with equivalent isolation and
    quotas; keep the no-host-fallback rule.
-5. **Memory evolution:** implement a richer `MemoryStore` (reflection, decay,
-   consolidation, embeddings) without changing agents.
+5. **Future memory work:** add a learned embedding provider, fuzzy procedure
+   transfer, and task-scoped retrieval contexts; keep provenance/verification rules.
 6. **Full HITL:** connect `ApprovalGate` and a clarification gateway to interactive
    CLI/UI flows and resumable BLOCKED tasks.
 7. **Concurrency:** execute independent ready tasks and independent tool calls with
