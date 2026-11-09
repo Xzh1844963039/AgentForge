@@ -216,7 +216,7 @@ Final code state:
 |---|---|
 | `pytest -q --cov=agentforge` | **257 passed, 2 skipped** |
 | Docker tests | **5 passed** (including container-death recovery) |
-| Coverage | **75%** (9,654 statements, 2,458 missed) |
+| Coverage | **75%** (9,657 statements, 2,458 missed) |
 | Ruff F/E9 | **All checks passed** |
 
 Phase 6A adds 15 tests: provider request/response/retry/redaction, full endpoint
