@@ -374,6 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_stage2.add_argument("--timeout", type=float, default=120.0)
     benchmark_stage2.add_argument("--max-requests", type=int, default=12)
     benchmark_stage2.add_argument("--max-tokens", type=int, default=20_000)
+    benchmark_stage2.add_argument("--request-delay", type=float, default=60.0)
 
     return parser
 

@@ -9,6 +9,7 @@ backed by persisted runtime state.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -109,6 +110,7 @@ class Stage2Result(BaseModel):
     budget_exhausted: bool = False
     budget_max_requests: int = MAX_REQUESTS
     budget_max_tokens: int = MAX_TOTAL_TOKENS
+    inter_request_delay: float = 0.0
     error_type: str | None = None
     error_detail: str | None = None
     output_dir: str = ""
@@ -134,6 +136,7 @@ class Stage2BudgetProvider(BaseLLMProvider):
         max_tokens: int = MAX_TOTAL_TOKENS,
         per_request_max_tokens: int = MAX_TOKENS_PER_REQUEST,
         expected_marker: str = EVIDENCE_MARKER,
+        inter_request_delay: float = 0.0,
     ) -> None:
         super().__init__(
             default_temperature=provider.default_temperature,
@@ -148,6 +151,7 @@ class Stage2BudgetProvider(BaseLLMProvider):
         self.max_tokens = max(1, max_tokens)
         self.per_request_max_tokens = max(1, per_request_max_tokens)
         self.expected_marker = expected_marker
+        self.inter_request_delay = max(0.0, inter_request_delay)
         self.requests = 0
         self.tokens = 0
         self.calls: list[Stage2Call] = []
@@ -173,6 +177,10 @@ class Stage2BudgetProvider(BaseLLMProvider):
         if self.tokens >= self.max_tokens:
             self.budget_exhausted = True
             raise Stage2BudgetExceeded("token", self.max_tokens, self.tokens)
+        if self.requests > 0 and self.inter_request_delay > 0:
+            # The HKGAI gateway cut every rapid follow-up request before any
+            # response header; space calls out so the upstream has drained.
+            await asyncio.sleep(self.inter_request_delay)
 
         capped = min(
             max_tokens if max_tokens is not None else self.per_request_max_tokens,
@@ -518,6 +526,7 @@ async def run_hkgai_stage2(
     max_requests: int = MAX_REQUESTS,
     max_tokens: int = MAX_TOTAL_TOKENS,
     structured_output_repairs: int = 2,
+    inter_request_delay: float | None = None,
 ) -> Stage2Result:
     """Run the bounded real Stage 2 workflow and persist its evidence."""
     live = provider_override is None
@@ -556,8 +565,12 @@ async def run_hkgai_stage2(
         }
     )
     base = provider_override or build_llm_provider(run_settings)
+    delay = inter_request_delay if inter_request_delay is not None else (60.0 if live else 0.0)
     budget = Stage2BudgetProvider(
-        base, max_requests=max_requests, max_tokens=max_tokens
+        base,
+        max_requests=max_requests,
+        max_tokens=max_tokens,
+        inter_request_delay=delay,
     )
     result = Stage2Result(
         mode="LIVE" if live else "OFFLINE_TEST",
@@ -567,6 +580,7 @@ async def run_hkgai_stage2(
         review_enabled=enable_review,
         budget_max_requests=budget.max_requests,
         budget_max_tokens=budget.max_tokens,
+        inter_request_delay=delay,
     )
     started = time.monotonic()
     workflow = None
@@ -595,6 +609,7 @@ async def run_hkgai_stage2(
             result.review_enabled = enable_review
             result.budget_max_requests = budget.max_requests
             result.budget_max_tokens = budget.max_tokens
+            result.inter_request_delay = delay
     except PermissionError:
         raise
     except Exception as exc:
@@ -645,7 +660,8 @@ def _write_report(root: Path, result: Stage2Result) -> None:
         f"{result.review_enabled}",
         f"- Budget: {result.budget_max_requests} requests / "
         f"{result.budget_max_tokens} tokens (per-request cap "
-        f"{MAX_TOKENS_PER_REQUEST})",
+        f"{MAX_TOKENS_PER_REQUEST}); inter-request delay "
+        f"{result.inter_request_delay}s",
         f"- Requests: {result.total_requests}",
         f"- Tokens: {result.total_tokens}",
         f"- Elapsed: {result.elapsed_seconds}s",
