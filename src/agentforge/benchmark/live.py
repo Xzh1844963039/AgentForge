@@ -14,7 +14,7 @@ from agentforge.benchmark.models import (
     ProviderKind,
     RunStatus,
 )
-from agentforge.benchmark.runner import BenchmarkRunner
+from agentforge.benchmark.runner import BenchmarkRunner, git_commit_hash
 from agentforge.config.settings import Settings
 from agentforge.models.common import utc_now
 
@@ -75,6 +75,7 @@ class LiveAcceptanceRunner:
             ),
             api_key_configured=_key_configured(self.settings),
             live_api_allowed=self.allow_live_api,
+            git_commit=git_commit_hash(),
             checked_at=utc_now(),
         )
         report.checks = self._base_checks()
@@ -271,6 +272,7 @@ class LiveAcceptanceRunner:
             "",
             f"- Provider: `{report.provider}`",
             f"- Model: `{report.model}`",
+            f"- Git commit: `{report.git_commit or 'unknown'}`",
             f"- API key configured: {report.api_key_configured}",
             f"- Live API explicitly allowed: {report.live_api_allowed}",
             f"- Status: **{report.status}**",

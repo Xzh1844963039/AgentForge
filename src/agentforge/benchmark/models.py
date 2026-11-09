@@ -470,6 +470,7 @@ class LiveCheck(BaseModel):
 class LiveAcceptanceReport(BaseModel):
     provider: str
     model: str
+    git_commit: str | None = None
     api_key_configured: bool = False
     live_api_allowed: bool = False
     checked_at: datetime = Field(default_factory=utc_now)

@@ -15,7 +15,7 @@ from agentforge.benchmark.models import (
     ProviderKind,
     RunStatus,
 )
-from agentforge.benchmark.runner import BenchmarkRunner
+from agentforge.benchmark.runner import BenchmarkRunner, git_commit_hash
 from agentforge.config.settings import Settings
 from agentforge.llm.base import BaseLLMProvider
 from agentforge.memory.evolution_store import EvolutionMemoryStore
@@ -23,6 +23,7 @@ from agentforge.persistence.database import SQLiteStore
 
 
 class LiveMemoryResult(BaseModel):
+    git_commit: str | None = None
     status: str = "NOT_VERIFIED"
     learning_runs: list[BenchmarkRun] = Field(default_factory=list)
     off_run: BenchmarkRun | None = None
@@ -59,7 +60,7 @@ class LiveMemoryExperimentRunner:
         root = self.output_dir / f"live_memory_{stamp}"
         root.mkdir(parents=True, exist_ok=True)
         shared_memory = root / "shared_memory.db"
-        result = LiveMemoryResult()
+        result = LiveMemoryResult(git_commit=git_commit_hash())
         try:
             learning = await BenchmarkRunner(
                 BenchmarkConfig(

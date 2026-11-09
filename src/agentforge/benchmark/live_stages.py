@@ -33,7 +33,7 @@ from agentforge.benchmark.models import (
     RunStatus,
 )
 from agentforge.benchmark.provider import LiveBudgetProvider
-from agentforge.benchmark.runner import BenchmarkRunner
+from agentforge.benchmark.runner import BenchmarkRunner, git_commit_hash
 from agentforge.config.settings import Settings
 from agentforge.llm.base import BaseLLMProvider
 from agentforge.llm.factory import build_llm_provider
@@ -68,6 +68,7 @@ class LiveStageResult(BaseModel):
 class LiveStageReport(BaseModel):
     provider: str
     model: str
+    git_commit: str | None = None
     api_key_configured: bool = False
     live_api_allowed: bool = False
     created_at: datetime = Field(default_factory=utc_now)
@@ -125,6 +126,7 @@ class LiveStageRunner:
             ),
             api_key_configured=_key_configured(self.settings),
             live_api_allowed=self.allow_live_api,
+            git_commit=git_commit_hash(),
             notes=[],
         )
         selected = [
@@ -559,6 +561,7 @@ class LiveStageRunner:
             "",
             f"- Provider: `{report.provider}`",
             f"- Model: `{report.model}`",
+            f"- Git commit: `{report.git_commit or 'unknown'}`",
             f"- API key configured: {report.api_key_configured}",
             f"- Live API authorized: {report.live_api_allowed}",
             f"- Overall: **{report.overall_status}**",
