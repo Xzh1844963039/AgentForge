@@ -117,7 +117,7 @@ After changing Stage 1 `max_tokens` from 32 to 256 and adding `finish_reason` to
 the stage metrics:
 
 ```text
-Full suite: 269 passed, 2 skipped
+Full suite: 274 passed, 2 skipped
 Docker tests: 5 passed (included in full suite)
 Ruff F/E9: clean
 ```

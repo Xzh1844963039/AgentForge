@@ -88,10 +88,13 @@ async def run_benchmark_command(
         return await _live(args, settings_factory, console)
     if command == "hkgai-probe":
         return await _hkgai_probe(args, settings_factory, console)
+    if command == "hkgai-experiments":
+        return await _hkgai_experiments(args, settings_factory, console)
     console.print(
         Text(
             "usage: agentforge benchmark "
-            "<list|run|compare|report|failures|live|hkgai-probe>"
+            "<list|run|compare|report|failures|live|hkgai-probe|"
+            "hkgai-experiments>"
         )
     )
     return 2
@@ -364,3 +367,51 @@ async def _hkgai_probe(args: argparse.Namespace, settings_factory, console: Cons
     console.print(Text(f"Budget: {result.budget}"))
     console.print(Text(f"Report: {Path(args.output_dir) / ('hkgai_probe_*') / 'PROBE_REPORT.md'}"))
     return 0 if result.complete else 1
+
+
+async def _hkgai_experiments(args: argparse.Namespace, settings_factory, console: Console) -> int:
+    from agentforge.benchmark.hkgai_experiments import run_hkgai_experiments
+
+    if not args.allow_live_api:
+        console.print(
+            Text(
+                "Refusing real HKGAI experiments: pass --allow-live-api explicitly.",
+                style="bold yellow",
+            )
+        )
+        return 2
+    settings = settings_factory(args)
+    try:
+        result = await run_hkgai_experiments(
+            settings,
+            allow_live_api=True,
+            experiment=args.experiment,
+            output_dir=args.output_dir,
+            timeout=args.timeout,
+        )
+    except PermissionError as exc:
+        console.print(Text(str(exc), style="red"))
+        return 2
+    table = Table(title=f"HKGAI control experiments: {result.status}")
+    table.add_column("Experiment")
+    table.add_column("Status")
+    table.add_column("HTTP")
+    table.add_column("Elapsed")
+    table.add_column("Tokens")
+    table.add_column("JSON")
+    table.add_column("Schema")
+    table.add_column("Plan")
+    for item in result.experiments:
+        table.add_row(
+            item.experiment,
+            item.status,
+            str(item.http_status),
+            f"{item.elapsed_seconds}s",
+            str(item.total_tokens),
+            str(item.valid_json),
+            str(item.schema_valid),
+            str(item.plan_valid),
+        )
+    console.print(table)
+    console.print(Text(f"Output: {result.output_dir}"))
+    return 0 if result.status == "PASSED" else 1

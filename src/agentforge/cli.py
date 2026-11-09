@@ -343,6 +343,18 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_probe.add_argument("--max-tokens", type=int, default=256)
     benchmark_probe.add_argument("--timeout", type=float, default=120.0)
 
+    benchmark_experiments = benchmark_sub.add_parser(
+        "hkgai-experiments",
+        help="two minimal HKGAI control experiments (A then B, max 2 requests)",
+    )
+    _add_common_options(benchmark_experiments, suppress_defaults=True)
+    benchmark_experiments.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_experiments.add_argument("--allow-live-api", action="store_true")
+    benchmark_experiments.add_argument(
+        "--experiment", choices=["A", "B", "AB"], default="AB"
+    )
+    benchmark_experiments.add_argument("--timeout", type=float, default=120.0)
+
     return parser
 
 
