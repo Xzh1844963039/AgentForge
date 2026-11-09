@@ -54,7 +54,7 @@ Rules:
 
 COMPACT_PLANNER_PROTOCOL = """Plan the goal as one JSON object only:
 {"goal_summary":"...","subtasks":[{"key":"k1","description":"...","required_capabilities":["capability"],"depends_on":[],"kind":"research|coding|analysis|writing|generic"}]}
-Rules: use only capability tokens from AGENTS; every task must be fully covered by one listed agent; depends_on references earlier keys and must be acyclic; at most MAX_SUBTASKS; do not add review/finalize tasks; return JSON only, no Markdown or commentary."""
+Rules: capability tokens only from AGENTS; every task covered by one listed agent; depends_on earlier keys, acyclic; at most MAX_SUBTASKS; no review/finalize tasks; output the JSON immediately, no reasoning, no Markdown."""
 
 
 def resolve_planner_protocol(configured: str, provider_name: str) -> str:

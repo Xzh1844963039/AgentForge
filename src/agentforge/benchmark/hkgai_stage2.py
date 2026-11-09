@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
-from agentforge.agents.base import COMPACT_ACTION_PROTOCOL
+from agentforge.agents.base import COMPACT_ACTION_PROTOCOL, POLICY_COMPACT_PROTOCOL
 from agentforge.agents.coordinator import COMPACT_PLANNER_PROTOCOL
 from agentforge.config.settings import Settings
 from agentforge.llm.base import (
@@ -37,9 +37,8 @@ MAX_TOTAL_TOKENS = 20_000
 MAX_TIMEOUT_SECONDS = 120.0
 
 STAGE2_GOAL = (
-    "Create and sandbox-execute a Python script named stage2_sum.py that prints "
-    'exactly "STAGE2_SUM=5" by computing 2 + 3, then have the final report quote '
-    "the recorded stdout and exit code from the tool audit."
+    'In the sandbox, run Python that prints "STAGE2_SUM=5"; then report the '
+    "recorded stdout and exit code."
 )
 EVIDENCE_MARKER = "STAGE2_SUM=5"
 
@@ -72,6 +71,7 @@ class Stage2Call(BaseModel):
     content_preview: str = ""
     compact_planner_prompt: bool = False
     compact_action_prompt: bool = False
+    compact_policy_prompt: bool = False
     tool_evidence_in_prompt: bool = False
     marker_in_prompt: bool = False
     status: str = "success"
@@ -95,7 +95,7 @@ class Stage2Result(BaseModel):
     plan_subtasks: int = 0
     plan_attempts: int = 0
     plan_summary: str | None = None
-    max_plan_subtasks: int = 2
+    max_plan_subtasks: int = 1
     review_enabled: bool = False
     assignments: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
@@ -189,6 +189,7 @@ class Stage2BudgetProvider(BaseLLMProvider):
             requested_max_tokens=capped,
             compact_planner_prompt=COMPACT_PLANNER_PROTOCOL in prompt,
             compact_action_prompt=COMPACT_ACTION_PROTOCOL in system,
+            compact_policy_prompt=POLICY_COMPACT_PROTOCOL in system,
             tool_evidence_in_prompt="[TOOL_EVIDENCE]" in prompt,
             marker_in_prompt=self.expected_marker in prompt,
         )
@@ -290,6 +291,17 @@ def evaluate_stage2(
     action_calls = [
         call for call in provider.calls if call.purpose.startswith("execute:")
     ]
+    policy_kinds = ("synthesis", "review", "finalize")
+    worker_calls = [
+        call
+        for call in action_calls
+        if not any(call.purpose.startswith(f"execute:{kind}") for kind in policy_kinds)
+    ]
+    policy_calls = [
+        call
+        for call in action_calls
+        if any(call.purpose.startswith(f"execute:{kind}") for kind in policy_kinds)
+    ]
     provider_ok = (
         provider.name == "hkgai"
         and provider_class_ok
@@ -297,7 +309,12 @@ def evaluate_stage2(
         and coordinator.agent_protocol == "compact"
         and plan_call is not None
         and plan_call.compact_planner_prompt
-        and all(call.compact_action_prompt for call in action_calls)
+        and bool(worker_calls)
+        and all(call.compact_action_prompt for call in worker_calls)
+        and all(
+            call.compact_policy_prompt or call.compact_action_prompt
+            for call in policy_calls
+        )
     )
     _check(
         result,
@@ -307,7 +324,7 @@ def evaluate_stage2(
         f"models={sorted(providers_used)}, planner={coordinator.planner_protocol}, "
         f"agent={coordinator.agent_protocol}, "
         f"plan_compact_prompt={bool(plan_call and plan_call.compact_planner_prompt)}, "
-        f"action_calls={len(action_calls)}",
+        f"worker_calls={len(worker_calls)}, policy_calls={len(policy_calls)}",
     )
 
     # B — Coordinator returned a plan that passed ExecutionPlan + validate_plan.
@@ -497,7 +514,7 @@ async def run_hkgai_stage2(
     require_sandbox: bool = True,
     required_tool: str = "python_execute",
     enable_review: bool = False,
-    max_plan_subtasks: int = 2,
+    max_plan_subtasks: int = 1,
     max_requests: int = MAX_REQUESTS,
     max_tokens: int = MAX_TOTAL_TOKENS,
     structured_output_repairs: int = 2,

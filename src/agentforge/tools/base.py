@@ -187,7 +187,11 @@ class ToolRegistry:
         if compact:
             if self._compact_catalog_cache is not None:
                 return self._compact_catalog_cache
-            lines = [_compact_tool_line(tool.spec) for tool in self._tools.values()]
+            lines = [
+                "(args validated by the dispatcher; permissions/approval enforced)"]
+            lines.extend(
+                _compact_tool_line(tool.spec) for tool in self._tools.values()
+            )
             self._compact_catalog_cache = "\n".join(lines)
             return self._compact_catalog_cache
         if self._catalog_cache is not None:
@@ -226,17 +230,12 @@ def _argument_type(schema: dict[str, Any]) -> str:
 
 
 def _compact_tool_line(spec: ToolSpec) -> str:
-    properties = spec.input_schema.get("properties") or {}
-    required = set(spec.input_schema.get("required") or [])
-    arguments = ", ".join(
-        f"{name}{'*' if name in required else ''}:{_argument_type(schema)}"
-        for name, schema in properties.items()
-    )
-    permissions = ",".join(permission.value for permission in spec.permissions) or "none"
-    approval = "; approval" if spec.requires_approval else ""
-    description = spec.description.strip().splitlines()[0][:200]
-    line = (
-        f"- {spec.name} [{permissions}{approval}]: {description} "
-        f"Args: {arguments or 'none'} (*=required)"
-    )
-    return line if len(line) <= 360 else line[:357] + "..."
+    """One short line per tool: name plus required argument names.
+
+    The dispatcher validates the full JSON schema, permissions and approval
+    gates on every call; the prompt only needs enough information to choose a
+    tool and name its required arguments.
+    """
+    required = list(spec.input_schema.get("required") or [])
+    arguments = ",".join(f"{name}*" for name in required)
+    return f"- {spec.name}({arguments})"

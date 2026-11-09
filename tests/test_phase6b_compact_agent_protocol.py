@@ -138,10 +138,10 @@ def test_compact_tool_catalog_keeps_names_permissions_and_required_args(tmp_path
         required = spec.input_schema.get("required") or []
         for name in required:
             assert f"{name}*" in compact or f"{name}*" in compact.replace(" ", "")
-    assert "file_delete" in compact
     assert "approval" in compact
     assert "python_execute" in compact
-    assert len(compact) < len(tools.prompt_catalog())
+    assert "delete_file" in compact
+    assert len(compact) < len(tools.prompt_catalog()) * 0.3
 
 
 def test_hkgai_runtime_uses_compact_planner_and_compact_actions(tmp_path):

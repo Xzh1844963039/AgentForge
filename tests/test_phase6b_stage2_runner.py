@@ -283,5 +283,7 @@ def test_stage2_runner_fails_fast_on_disconnect(tmp_path):
 
 
 def test_stage2_goal_is_tool_and_evidence_focused():
-    assert "stage2_sum.py" in STAGE2_GOAL
+    assert "sandbox" in STAGE2_GOAL.lower()
+    assert "python" in STAGE2_GOAL.lower()
+    assert "stdout" in STAGE2_GOAL.lower()
     assert EVIDENCE_MARKER in STAGE2_GOAL
