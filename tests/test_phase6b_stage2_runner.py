@@ -133,9 +133,11 @@ def test_stage2_runner_passes_offline_with_scripted_runtime(tmp_path):
             provider_override=provider,
             require_sandbox=False,
             required_tool="read_file",
+            enable_review=True,
         )
     )
     assert result.mode == "OFFLINE_TEST"
+    assert result.review_enabled is True
     assert result.status == "MOCK_VALIDATED"
     assert result.workflow_status == "completed"
     assert result.plan_subtasks == 1
@@ -154,6 +156,27 @@ def test_stage2_runner_passes_offline_with_scripted_runtime(tmp_path):
     assert len(run_dirs) == 1
     assert (run_dirs[0] / "stage2.json").exists()
     assert (run_dirs[0] / "STAGE2_REPORT.md").exists()
+
+
+def test_stage2_runner_default_no_review_shape(tmp_path):
+    """The default real-run shape skips the review phase (6 calls)."""
+    script = _stage2_script()
+    del script[5]  # remove the review response; finalize is last
+    provider = _NamedMockProvider("hkgai", scripted_responses=script)
+    result = pytest.importorskip("asyncio").run(
+        run_hkgai_stage2(
+            _settings(tmp_path),
+            allow_live_api=False,
+            output_dir=tmp_path / "runs",
+            provider_override=provider,
+            require_sandbox=False,
+            required_tool="read_file",
+        )
+    )
+    assert result.review_enabled is False
+    assert result.status == "MOCK_VALIDATED"
+    assert result.total_requests == 6
+    assert not [key for key, check in result.checks.items() if not check.passed]
 
 
 def test_stage2_runner_requires_live_authorization(tmp_path):

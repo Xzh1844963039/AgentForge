@@ -171,17 +171,35 @@ class CoordinatorAgent(BaseAgent):
                     )
                 )
                 if attempt_index < max_attempts - 1:
-                    messages = [
-                        *base_messages,
-                        ChatMessage.assistant(response.content),
-                        ChatMessage.user(
-                            "[REPAIR]\n"
-                            f"Your previous response was invalid: {exc}\n"
-                            "Return a corrected JSON plan only. Ensure unique keys, "
-                            "known dependency keys, no cycles, capabilities from "
-                            f"the catalog, and at most {max_subtasks} subtasks."
-                        ),
-                    ]
+                    if response.finish_reason == "length":
+                        # Never echo a truncated reply: the oversized follow-up
+                        # prompt is what pushed HKGAI into a pre-response
+                        # disconnect. Ask again from the original prompt instead.
+                        messages = [
+                            *base_messages,
+                            ChatMessage.user(
+                                "[RETRY]\n"
+                                "Your previous reply hit the output limit before "
+                                "the plan JSON was complete. Do not produce "
+                                "reasoning, thinking or commentary. Reply with the "
+                                "JSON object only; the first character of your "
+                                "reply must be '{' and the object must be complete "
+                                "and valid."
+                            ),
+                        ]
+                    else:
+                        messages = [
+                            *base_messages,
+                            ChatMessage.assistant(response.content[:600]),
+                            ChatMessage.user(
+                                "[REPAIR]\n"
+                                f"Your previous response was invalid: {exc}\n"
+                                "Return a corrected JSON plan only. Ensure unique "
+                                "keys, known dependency keys, no cycles, capabilities "
+                                f"from the catalog, and at most {max_subtasks} "
+                                "subtasks."
+                            ),
+                        ]
                 continue
 
             attempts.append(

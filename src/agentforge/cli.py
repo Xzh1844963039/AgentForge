@@ -372,6 +372,8 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_stage2.add_argument("--output-dir", default="benchmarks/runs")
     benchmark_stage2.add_argument("--allow-live-api", action="store_true")
     benchmark_stage2.add_argument("--timeout", type=float, default=120.0)
+    benchmark_stage2.add_argument("--max-requests", type=int, default=12)
+    benchmark_stage2.add_argument("--max-tokens", type=int, default=20_000)
 
     return parser
 

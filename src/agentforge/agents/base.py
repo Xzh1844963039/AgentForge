@@ -370,16 +370,36 @@ class BaseAgent:
                 last_warning = str(exc)
                 if repair_count < self.max_output_repairs:
                     repair_count += 1
-                    messages.append(ChatMessage.assistant(response.content))
-                    messages.append(
-                        ChatMessage.user(
-                            "[REPAIR]\n"
-                            f"Your previous response was invalid: {exc}\n"
-                            "Return exactly one JSON action object only, with no "
-                            "Markdown fences or prose. Use one of: complete, "
-                            "tool_call, delegate, clarify, reject_assignment, fail."
+                    if response.finish_reason == "length":
+                        # Do not echo a truncated reply: the oversized follow-up
+                        # prompt is what triggered HKGAI pre-response
+                        # disconnects. Ask again with a short, fresh nudge.
+                        messages.append(
+                            ChatMessage.user(
+                                "[RETRY]\n"
+                                "Your previous reply hit the output limit before "
+                                "the JSON action was complete. Do not produce "
+                                "reasoning or commentary. Reply with exactly one "
+                                "JSON action object only; the first character of "
+                                "your reply must be '{'. Use one of: complete, "
+                                "tool_call, delegate, clarify, "
+                                "reject_assignment, fail."
+                            )
                         )
-                    )
+                    else:
+                        messages.append(
+                            ChatMessage.assistant(response.content[:600])
+                        )
+                        messages.append(
+                            ChatMessage.user(
+                                "[REPAIR]\n"
+                                f"Your previous response was invalid: {exc}\n"
+                                "Return exactly one JSON action object only, with no "
+                                "Markdown fences or prose. Use one of: complete, "
+                                "tool_call, delegate, clarify, reject_assignment, "
+                                "fail."
+                            )
+                        )
                     continue
                 return self._failed_tool_result(
                     response,

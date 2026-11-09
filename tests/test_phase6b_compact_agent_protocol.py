@@ -10,11 +10,15 @@ from agentforge.agents.base import (
     parse_agent_action,
     resolve_agent_protocol,
 )
+from agentforge.agents import build_default_agents
 from agentforge.agents.coordinator import COMPACT_PLANNER_PROTOCOL
 from agentforge.config.settings import Settings
+from agentforge.llm.base import LLMResponse, TokenUsage
 from agentforge.llm.mock import MockProvider
-from agentforge.models.task import AgentActionType
+from agentforge.memory import InMemoryMemoryStore
+from agentforge.models.task import AgentActionType, Task
 from agentforge.runtime import AgentForgeRuntime
+from agentforge.tools import ToolRegistry
 
 
 class _NamedMockProvider(MockProvider):
@@ -247,3 +251,80 @@ def test_compact_mode_still_enforces_tool_validation(tmp_path):
     assert all(status != "success" for status, _error in records)
     assert any("content" in error for _status, error in records)
     assert workflow_status in {"completed", "failed"}
+
+
+def _truncated_response(content: str) -> LLMResponse:
+    return LLMResponse(
+        content=content,
+        provider="mock",
+        model="mock-deterministic-v1",
+        usage=TokenUsage(prompt_tokens=10, completion_tokens=1024, total_tokens=1034),
+        finish_reason="length",
+    )
+
+
+def test_plan_retry_does_not_echo_truncated_content():
+    import asyncio
+
+    provider = MockProvider(
+        scripted_responses=[
+            _truncated_response(
+                '{"goal_summary":"x","subtasks":[{"key":"a","description":"trunc'
+            ),
+            _plan_payload(),
+        ]
+    )
+    agents = build_default_agents(
+        provider=provider,
+        memory=InMemoryMemoryStore(),
+        tools=ToolRegistry(),
+        planner_protocol="compact",
+    )
+    coordinator = next(a for a in agents if a.agent_id == "coordinator")
+
+    result = asyncio.run(
+        coordinator.plan_goal(
+            "Create notes/simple.md containing hello.",
+            agent_cards=[agent.card for agent in agents],
+            max_subtasks=3,
+        )
+    )
+    assert len(result.attempts) == 2
+    assert result.attempts[0].error is not None
+    second = provider.calls[1]["messages"]
+    assert not any(message["role"] == "assistant" for message in second)
+    assert "[RETRY]" in second[-1]["content"]
+
+
+def test_action_retry_does_not_echo_truncated_content():
+    import asyncio
+
+    provider = MockProvider(
+        scripted_responses=[
+            _truncated_response('{"action":"complete","content":"trunc'),
+            json.dumps(
+                {"action": "complete", "content": "ok", "reasoning": "done"}
+            ),
+        ]
+    )
+    agents = build_default_agents(
+        provider=provider,
+        memory=InMemoryMemoryStore(),
+        tools=ToolRegistry(),
+        agent_protocol="compact",
+    )
+    coding = next(a for a in agents if a.agent_id == "coding")
+    task = Task(
+        workflow_id="wf_test",
+        description="Return a completion.",
+        required_capabilities=["coding"],
+        assigned_agent="coding",
+        metadata={"kind": "coding"},
+    )
+
+    result = asyncio.run(coding.execute_task(task, goal="test goal"))
+    assert result.repair_count == 1
+    assert result.action.content == "ok"
+    second = provider.calls[1]["messages"]
+    assert not any(message["role"] == "assistant" for message in second)
+    assert "[RETRY]" in second[-1]["content"]

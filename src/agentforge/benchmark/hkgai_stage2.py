@@ -69,6 +69,7 @@ class Stage2Call(BaseModel):
     model: str | None = None
     finish_reason: str | None = None
     http_status: int | None = None
+    content_preview: str = ""
     compact_planner_prompt: bool = False
     compact_action_prompt: bool = False
     tool_evidence_in_prompt: bool = False
@@ -94,6 +95,8 @@ class Stage2Result(BaseModel):
     plan_subtasks: int = 0
     plan_attempts: int = 0
     plan_summary: str | None = None
+    max_plan_subtasks: int = 2
+    review_enabled: bool = False
     assignments: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     final_result_excerpt: str = ""
@@ -104,6 +107,8 @@ class Stage2Result(BaseModel):
     hard_stopped: bool = False
     hard_stop_reason: str | None = None
     budget_exhausted: bool = False
+    budget_max_requests: int = MAX_REQUESTS
+    budget_max_tokens: int = MAX_TOTAL_TOKENS
     error_type: str | None = None
     error_detail: str | None = None
     output_dir: str = ""
@@ -213,6 +218,7 @@ class Stage2BudgetProvider(BaseLLMProvider):
         call.model = response.model
         call.finish_reason = response.finish_reason
         call.http_status = response.raw.get("http_status")
+        call.content_preview = response.content[:300]
         usage = response.usage
         call.prompt_tokens = usage.prompt_tokens
         call.completion_tokens = usage.completion_tokens
@@ -490,6 +496,11 @@ async def run_hkgai_stage2(
     provider_override: BaseLLMProvider | None = None,
     require_sandbox: bool = True,
     required_tool: str = "python_execute",
+    enable_review: bool = False,
+    max_plan_subtasks: int = 2,
+    max_requests: int = MAX_REQUESTS,
+    max_tokens: int = MAX_TOTAL_TOKENS,
+    structured_output_repairs: int = 2,
 ) -> Stage2Result:
     """Run the bounded real Stage 2 workflow and persist its evidence."""
     live = provider_override is None
@@ -521,15 +532,24 @@ async def run_hkgai_stage2(
             "max_tokens": MAX_TOKENS_PER_REQUEST,
             "planner_protocol": "auto",
             "agent_protocol": "auto",
+            "enable_final_review": enable_review,
+            "max_plan_subtasks": max_plan_subtasks,
+            "structured_output_repairs": structured_output_repairs,
             "data_dir": data_dir,
         }
     )
     base = provider_override or build_llm_provider(run_settings)
-    budget = Stage2BudgetProvider(base)
+    budget = Stage2BudgetProvider(
+        base, max_requests=max_requests, max_tokens=max_tokens
+    )
     result = Stage2Result(
         mode="LIVE" if live else "OFFLINE_TEST",
         configured_model=run_settings.hkgai_model or "unknown",
         output_dir=str(root),
+        max_plan_subtasks=max_plan_subtasks,
+        review_enabled=enable_review,
+        budget_max_requests=budget.max_requests,
+        budget_max_tokens=budget.max_tokens,
     )
     started = time.monotonic()
     workflow = None
@@ -554,6 +574,10 @@ async def run_hkgai_stage2(
                 required_tool=required_tool,
             )
             result.output_dir = str(root)
+            result.max_plan_subtasks = max_plan_subtasks
+            result.review_enabled = enable_review
+            result.budget_max_requests = budget.max_requests
+            result.budget_max_tokens = budget.max_tokens
     except PermissionError:
         raise
     except Exception as exc:
@@ -600,6 +624,11 @@ def _write_report(root: Path, result: Stage2Result) -> None:
         f"- Configured model: `{result.configured_model}`",
         f"- Workflow: `{result.workflow_id or 'n/a'}` ({result.workflow_status})",
         f"- Goal: {result.goal}",
+        f"- Plan subtask cap: {result.max_plan_subtasks}; review phase: "
+        f"{result.review_enabled}",
+        f"- Budget: {result.budget_max_requests} requests / "
+        f"{result.budget_max_tokens} tokens (per-request cap "
+        f"{MAX_TOKENS_PER_REQUEST})",
         f"- Requests: {result.total_requests}",
         f"- Tokens: {result.total_tokens}",
         f"- Elapsed: {result.elapsed_seconds}s",

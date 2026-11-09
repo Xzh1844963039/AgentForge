@@ -480,6 +480,8 @@ async def _hkgai_stage2(args: argparse.Namespace, settings_factory, console: Con
             allow_live_api=True,
             output_dir=args.output_dir,
             timeout=args.timeout,
+            max_requests=args.max_requests,
+            max_tokens=args.max_tokens,
         )
     except PermissionError as exc:
         console.print(Text(str(exc), style="red"))
