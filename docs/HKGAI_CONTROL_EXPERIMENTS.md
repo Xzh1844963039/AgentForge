@@ -62,14 +62,14 @@ Messages:
 - User: same format as production, with:
   - goal: `Create notes/simple.md containing "hello".`
   - the same default agent catalog;
-  - `MAX_SUBTASKS=1`;
+  - original `MAX_SUBTASKS=3`; the model is asked to produce one minimal task;
   - the same "Return the JSON execution plan now" instruction.
 
 Validation:
 
 - JSON extraction;
 - `ExecutionPlan` schema validation;
-- `validate_plan(max_subtasks=1)`;
+- `validate_plan(max_subtasks=3)` with exactly one resulting subtask;
 - exactly one subtask;
 - full capability coverage by a default agent (CapabilityAssigner);
 - non-empty goal summary.
@@ -147,10 +147,40 @@ prompt/response is written.
 
 No real request is made by these tests.
 
-## 7. Current status
+## 7. Executed results (2026-11-09 20:00)
 
-- Experiments implemented and offline-tested.
-- Real experiments: **NOT RUN**.
-- New paid-request authorization: **pending**.
-- Stage 3–6: not started.
-- No Push.
+Both authorized requests were executed. A passed; B failed and the suite stopped.
+
+| Experiment | Status | HTTP | Elapsed | Tokens | JSON | Schema |
+|---|---|---|---:|---:|---|---|
+| A — minimal JSON | **PASSED** | 200 | 6.406s | 186 | true | true |
+| B — real Planner, simple task | **FAILED** | none | 58.375s | 0 | false | false |
+
+A returned exactly `{"status":"ok","value":1}`. Response model:
+`t2_hkgai-v3_fp8_1m_e10_meeting` (configured alias `...e7`).
+
+B received no HTTP response headers, no bytes, no usage, and disconnected with
+`RemoteProtocolError: Server disconnected without sending a response` after
+58.375s.
+
+### Prompt-size comparison
+
+| Prompt | Chars |
+|---|---:|
+| A system + user | 200 |
+| B real `PLANNER_PROTOCOL` + full catalog + simple task | 2,290 |
+| Previous full Stage 2 prompt | 2,298 |
+
+B is only 8 characters shorter than the failed full Stage 2 prompt. Therefore B
+did not materially isolate task complexity by prompt length; it isolated a short
+structured request (A) from the full Planner system/catalog/Schema structure. The
+failure correlates with the full planning prompt, not with the specific task
+wording.
+
+No AgentForge request-construction defect was demonstrated. The next useful
+control (not authorized/run) would separate:
+1. real system prompt + minimal catalog;
+2. real catalog + minimal system prompt;
+3. real system + catalog with plain-text response request.
+
+Stage 3–6 not started. No Push.

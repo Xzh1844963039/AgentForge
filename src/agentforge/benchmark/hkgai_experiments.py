@@ -98,7 +98,7 @@ def experiment_b_messages() -> list[ChatMessage]:
     user = (
         f"[GOAL]\n{goal}\n\n"
         f"[AVAILABLE_AGENTS]\n{_catalog()}\n\n"
-        "[MAX_SUBTASKS]\n1\n\n"
+        "[MAX_SUBTASKS]\n3\n\n"
         "Return the JSON execution plan now."
     )
     return [ChatMessage.system(PLANNER_PROTOCOL), ChatMessage.user(user)]
@@ -120,7 +120,7 @@ def validate_experiment_b(content: str) -> tuple[bool, bool, int]:
         if not isinstance(payload, dict):
             return False, False, 0
         plan = ExecutionPlan.model_validate(payload)
-        ordered = validate_plan(plan, max_subtasks=1)
+        ordered = validate_plan(plan, max_subtasks=3)
     except Exception:
         return True, False, 0
     if not plan.goal_summary.strip() or len(ordered) != 1:

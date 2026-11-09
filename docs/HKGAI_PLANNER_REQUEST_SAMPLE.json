@@ -1,0 +1,16 @@
+{
+  "model": "t2_hkgai-v3_fp8_1m_e7",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are the planning module of the CoordinatorAgent.\n\nProduce a JSON execution plan for a team of agents. The plan is validated and\nexecuted by a deterministic orchestrator, so it must be mechanically sound.\n\nJSON schema:\n{\n  \"goal_summary\": \"<one sentence>\",\n  \"subtasks\": [\n    {\n      \"key\": \"<short unique key>\",\n      \"description\": \"<concrete, self-contained work item>\",\n      \"required_capabilities\": [\"<capability token from the catalog>\"],\n      \"depends_on\": [\"<key of an earlier subtask>\"],\n      \"kind\": \"research|coding|analysis|writing|generic\"\n    }\n  ]\n}\n\nRules:\n- Use only capability tokens that appear in the available-agent catalog.\n- Every subtask must be fully covered by at least one listed agent. Split work\n  if no single agent has all required capabilities.\n- Dependencies must reference other subtask keys and form an acyclic graph.\n- Keep the plan small: at most the stated maximum number of subtasks.\n- Plan substantive work only. Do NOT add a final review task: the platform\n  always runs an independent review phase after synthesis.\n- Descriptions must be specific enough for an agent that cannot see this prompt.\n- Return exactly one JSON object. No Markdown fences, no commentary."
+    },
+    {
+      "role": "user",
+      "content": "[GOAL]\nCreate notes/simple.md containing \"hello\".\n\n[AVAILABLE_AGENTS]\n- coordinator (CoordinatorAgent, role=coordinator): capabilities=planning, coordination, task_decomposition, delegation, synthesis, finalization. Plans complex goals, decomposes them into a task DAG, consolidates agent results, and produces the final deliverable.\n- research (ResearchAgent, role=research): capabilities=research, information_retrieval, analysis, summarization. Researches topics, compares alternatives, organises evidence, and produces structured briefs with explicit assumptions.\n- coding (CodingAgent, role=coding): capabilities=coding, python, software_architecture, implementation_planning, testing. Designs Python architectures and implementation plans, and owns code-related analysis and test strategy.\n- reviewer (ReviewerAgent, role=reviewer): capabilities=review, quality_assurance, critique, risk_analysis, verification. Independently audits drafts and plans for correctness, completeness, consistency, feasibility, and risk.\n\n[MAX_SUBTASKS]\n3\n\nReturn the JSON execution plan now."
+    }
+  ],
+  "temperature": 0.2,
+  "max_tokens": 512,
+  "stream": false
+}

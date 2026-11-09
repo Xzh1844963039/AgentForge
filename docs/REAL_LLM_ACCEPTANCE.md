@@ -144,11 +144,17 @@ If no promoted memory or no retrieval occurs, the experiment is reported
 - Optional SSE streaming is implemented (`AGENTFORGE_HKGAI_STREAM` / provider
   `stream=True`) with 10 offline parsing tests.
 - Authorized one-request streaming probe: **FAILED after 67.437s**; the server
-  sent no HTTP response headers, no SSE bytes, no usage and no model. This is an
-  upstream/gateway pre-response disconnect, not an SSE parsing issue.
+  sent no HTTP response headers, no SSE bytes, no usage and no model.
+- Control experiment A (minimal JSON): **PASSED** — HTTP 200, 6.406s, 186 tokens,
+  exact JSON. Response model `t2_hkgai-v3_fp8_1m_e10_meeting`.
+- Control experiment B (real Planner prompt, simple one-task goal): **FAILED** —
+  no HTTP headers, no bytes, no usage, disconnect after 58.375s. Its prompt is
+  2,290 chars vs the previous failed Stage 2 prompt at 2,298 chars, so B did not
+  materially reduce prompt size.
 - Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
-- Actual requests: 5 in Stage 1 work, 4 in Stage 2 work, 1 streaming probe;
-  total 10. Tokens: 376 in Stage 1 work; 0 returned in Stage 2/probe work.
+- Actual requests: 5 in Stage 1 work, 4 in Stage 2 work, 1 streaming probe,
+  1 A + 1 B control; total 12. Tokens: 562 (376 Stage 1 + 186 A); 0 returned in
+  Stage 2/probe/B work.
 - Paid calls were limited to the authorized HKGAI endpoint; no other provider was
   used.
 - API key scan: not present in tracked files, stage JSON/Markdown, runtime logs or

@@ -1,0 +1,67 @@
+{
+  "status": "FAILED",
+  "configured_model": "t2_hkgai-v3_fp8_1m_e7",
+  "stream": false,
+  "experiments": [
+    {
+      "experiment": "A",
+      "question": "Can the model return a minimal JSON object without planning?",
+      "status": "passed",
+      "http_status": 200,
+      "response_model": "t2_hkgai-v3_fp8_1m_e10_meeting",
+      "elapsed_seconds": 6.406,
+      "prompt_tokens": 133,
+      "completion_tokens": 53,
+      "total_tokens": 186,
+      "finish_reason": "stop",
+      "content_chars": 25,
+      "content_preview": "{\"status\":\"ok\",\"value\":1}",
+      "valid_json": true,
+      "schema_valid": true,
+      "plan_valid": true,
+      "plan_subtasks": 0,
+      "error_type": null,
+      "error_detail": null,
+      "budget": {
+        "requests": 1,
+        "tokens": 186,
+        "max_requests": 2,
+        "max_tokens": 20000,
+        "request_budget_exceeded": false,
+        "token_budget_exceeded": false
+      },
+      "checked_at": "2026-11-09T12:00:03.942508Z"
+    },
+    {
+      "experiment": "B",
+      "question": "Does the real PLANNER_PROTOCOL work with a minimal one-task goal?",
+      "status": "failed",
+      "http_status": null,
+      "response_model": null,
+      "elapsed_seconds": 58.375,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "finish_reason": null,
+      "content_chars": 0,
+      "content_preview": "",
+      "valid_json": false,
+      "schema_valid": false,
+      "plan_valid": false,
+      "plan_subtasks": 0,
+      "error_type": "LLMProviderError",
+      "error_detail": "hkgai transport error after 58382 ms: RemoteProtocolError: Server disconnected without sending a response.",
+      "budget": {
+        "requests": 2,
+        "tokens": 186,
+        "max_requests": 2,
+        "max_tokens": 20000,
+        "request_budget_exceeded": false,
+        "token_budget_exceeded": false
+      },
+      "checked_at": "2026-11-09T12:00:10.338931Z"
+    }
+  ],
+  "notes": [],
+  "output_dir": "benchmarks\\runs\\hkgai_experiments_20261109_200003"
+}
