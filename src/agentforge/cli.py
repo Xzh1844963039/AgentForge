@@ -364,6 +364,15 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_compact.add_argument("--allow-live-api", action="store_true")
     benchmark_compact.add_argument("--timeout", type=float, default=120.0)
 
+    benchmark_stage2 = benchmark_sub.add_parser(
+        "hkgai-stage2",
+        help="bounded real Stage 2 acceptance (max 12 requests / 20k tokens)",
+    )
+    _add_common_options(benchmark_stage2, suppress_defaults=True)
+    benchmark_stage2.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_stage2.add_argument("--allow-live-api", action="store_true")
+    benchmark_stage2.add_argument("--timeout", type=float, default=120.0)
+
     return parser
 
 

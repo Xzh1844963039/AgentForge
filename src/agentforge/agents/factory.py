@@ -101,6 +101,7 @@ def build_default_agents(
     max_task_tokens: int = 120_000,
     max_repeated_tool_actions: int = 3,
     planner_protocol: str = "full",
+    agent_protocol: str = "full",
 ) -> list[BaseAgent]:
     agents: list[BaseAgent] = []
     for profile in DEFAULT_PROFILES:
@@ -119,6 +120,7 @@ def build_default_agents(
                 max_task_tokens=max_task_tokens,
                 max_repeated_tool_actions=max_repeated_tool_actions,
                 planner_protocol=planner_protocol,
+                agent_protocol=agent_protocol,
             )
         )
     return agents

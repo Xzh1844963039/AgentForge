@@ -10,7 +10,7 @@ import logging
 
 from pydantic import BaseModel
 
-from agentforge.agents.base import BaseAgent
+from agentforge.agents.base import BaseAgent, resolve_agent_protocol
 from agentforge.agents.coordinator import resolve_planner_protocol
 from agentforge.agents.factory import build_default_agents
 from agentforge.agents.registry import AgentRegistry
@@ -185,6 +185,9 @@ class AgentForgeRuntime:
             max_repeated_tool_actions=self.settings.max_repeated_tool_actions,
             planner_protocol=resolve_planner_protocol(
                 self.settings.planner_protocol, self.provider.name
+            ),
+            agent_protocol=resolve_agent_protocol(
+                self.settings.agent_protocol, self.provider.name
             ),
         ):
             self.agents.register(agent)

@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     structured_output_repairs: int = Field(default=1, ge=0, le=5)
     require_structured_actions: bool = True
     planner_protocol: Literal["auto", "full", "compact"] = "auto"
+    agent_protocol: Literal["auto", "full", "compact"] = "auto"
     enable_final_review: bool = True
 
     # --- Tools -----------------------------------------------------------------

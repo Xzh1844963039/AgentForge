@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from agentforge.agents.base import resolve_agent_protocol
 from agentforge.agents.coordinator import (
     CoordinatorAgent,
     resolve_planner_protocol,
@@ -121,6 +122,9 @@ def _single_agent_runtime(runtime: AgentForgeRuntime) -> None:
         max_repeated_tool_actions=runtime.settings.max_repeated_tool_actions,
         planner_protocol=resolve_planner_protocol(
             runtime.settings.planner_protocol, runtime.provider.name
+        ),
+        agent_protocol=resolve_agent_protocol(
+            runtime.settings.agent_protocol, runtime.provider.name
         ),
     )
     for permission in ToolPermission:

@@ -92,11 +92,13 @@ async def run_benchmark_command(
         return await _hkgai_experiments(args, settings_factory, console)
     if command == "hkgai-compact-planner":
         return await _hkgai_compact_planner(args, settings_factory, console)
+    if command == "hkgai-stage2":
+        return await _hkgai_stage2(args, settings_factory, console)
     console.print(
         Text(
             "usage: agentforge benchmark "
             "<list|run|compare|report|failures|live|hkgai-probe|"
-            "hkgai-experiments|hkgai-compact-planner>"
+            "hkgai-experiments|hkgai-compact-planner|hkgai-stage2>"
         )
     )
     return 2
@@ -453,6 +455,46 @@ async def _hkgai_compact_planner(args: argparse.Namespace, settings_factory, con
     table.add_row("finish_reason", str(result.finish_reason))
     table.add_row("JSON / plan / capability", f"{result.valid_json} / {result.plan_valid} / {result.capability_valid}")
     table.add_row("Subtasks", str(result.subtask_count))
+    table.add_row("Error", result.error_type or "none")
+    console.print(table)
+    console.print(Text(f"Output: {result.output_dir}"))
+    return 0 if result.status == "PASSED" else 1
+
+
+async def _hkgai_stage2(args: argparse.Namespace, settings_factory, console: Console) -> int:
+    from agentforge.benchmark.hkgai_stage2 import run_hkgai_stage2
+
+    if not args.allow_live_api:
+        console.print(
+            Text(
+                "Refusing real Stage 2: pass --allow-live-api explicitly.",
+                style="bold yellow",
+            )
+        )
+        return 2
+    
+    settings = settings_factory(args)
+    try:
+        result = await run_hkgai_stage2(
+            settings,
+            allow_live_api=True,
+            output_dir=args.output_dir,
+            timeout=args.timeout,
+        )
+    except PermissionError as exc:
+        console.print(Text(str(exc), style="red"))
+        return 2
+    table = Table(title=f"HKGAI Real Stage 2: {result.status} [{result.mode}]")
+    table.add_column("Check / Metric")
+    table.add_column("Value")
+    table.add_row("Configured model", result.configured_model)
+    table.add_row("Workflow", f"{result.workflow_id or 'n/a'} ({result.workflow_status})")
+    table.add_row("Requests / tokens", f"{result.total_requests} / {result.total_tokens}")
+    table.add_row("Elapsed", f"{result.elapsed_seconds}s")
+    for key in sorted(result.checks):
+        check = result.checks[key]
+        table.add_row(key, f"{check.passed} — {check.detail}")
+    table.add_row("Hard stopped", str(result.hard_stopped))
     table.add_row("Error", result.error_type or "none")
     console.print(table)
     console.print(Text(f"Output: {result.output_dir}"))

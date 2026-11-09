@@ -148,6 +148,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
         self._catalog_cache: str | None = None
+        self._compact_catalog_cache: str | None = None
 
     def register(self, tool: BaseTool) -> None:
         if tool.spec.name in self._tools:
@@ -156,6 +157,7 @@ class ToolRegistry:
             raise TypeError("only BaseTool instances can be registered")
         self._tools[tool.spec.name] = tool
         self._catalog_cache = None
+        self._compact_catalog_cache = None
 
     def get(self, name: str) -> BaseTool:
         try:
@@ -172,12 +174,25 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return list(self._tools)
 
-    def prompt_catalog(self) -> str:
+    def prompt_catalog(self, *, compact: bool = False) -> str:
+        """Render the tool catalog for a system prompt.
+
+        ``compact`` keeps every tool name, permission set, approval flag, short
+        description and argument names/types, but drops the full JSON schemas.
+        Argument validation still happens in the dispatcher against the real
+        schema, so the compact form cannot bypass validation.
+        """
         if not self._tools:
             return "(no tools are enabled)"
+        if compact:
+            if self._compact_catalog_cache is not None:
+                return self._compact_catalog_cache
+            lines = [_compact_tool_line(tool.spec) for tool in self._tools.values()]
+            self._compact_catalog_cache = "\n".join(lines)
+            return self._compact_catalog_cache
         if self._catalog_cache is not None:
             return self._catalog_cache
-        lines: list[str] = []
+        lines = []
         for tool in self._tools.values():
             spec = tool.spec
             schema = json.dumps(spec.input_schema, ensure_ascii=False, separators=(",", ":"))
@@ -198,3 +213,30 @@ class ToolRegistry:
 
     def __len__(self) -> int:
         return len(self._tools)
+
+
+def _argument_type(schema: dict[str, Any]) -> str:
+    if isinstance(schema.get("type"), str):
+        return str(schema["type"])
+    if "anyOf" in schema:
+        return "any"
+    if "enum" in schema:
+        return "enum"
+    return "any"
+
+
+def _compact_tool_line(spec: ToolSpec) -> str:
+    properties = spec.input_schema.get("properties") or {}
+    required = set(spec.input_schema.get("required") or [])
+    arguments = ", ".join(
+        f"{name}{'*' if name in required else ''}:{_argument_type(schema)}"
+        for name, schema in properties.items()
+    )
+    permissions = ",".join(permission.value for permission in spec.permissions) or "none"
+    approval = "; approval" if spec.requires_approval else ""
+    description = spec.description.strip().splitlines()[0][:200]
+    line = (
+        f"- {spec.name} [{permissions}{approval}]: {description} "
+        f"Args: {arguments or 'none'} (*=required)"
+    )
+    return line if len(line) <= 360 else line[:357] + "..."

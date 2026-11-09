@@ -306,6 +306,7 @@ HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the
 | `AGENTFORGE_STRUCTURED_OUTPUT_REPAIRS` | `1` | Bounded JSON action/plan repair attempts |
 | `AGENTFORGE_REQUIRE_STRUCTURED_ACTIONS` | `true` | Reject plain text in task mode |
 | `AGENTFORGE_PLANNER_PROTOCOL` | `auto` | Planner prompt: auto (compact for HKGAI), full, or compact |
+| `AGENTFORGE_AGENT_PROTOCOL` | `auto` | Agent action/tool prompt: auto (compact for HKGAI), full, or compact |
 | `AGENTFORGE_MAX_TASK_TOKENS` | `120000` | Per-task token guard |
 | `AGENTFORGE_MAX_LLM_CALLS_PER_WORKFLOW` | `200` | Workflow-wide LLM-call guard |
 | `AGENTFORGE_MAX_REPEATED_TOOL_ACTIONS` | `3` | Stop repeated identical tool calls |
