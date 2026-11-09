@@ -129,23 +129,36 @@ Protocol:
 If no promoted memory or no retrieval occurs, the experiment is reported
 `INCONCLUSIVE`; a single successful ON run is not evidence of a memory benefit.
 
-## 6. Current status (this environment)
+## 6. Current status (2026-11-09 HKGAI run)
 
-- DeepSeek API key: **not configured**.
-- HKGAI key/base/model: **not configured**.
-- `.env` file: absent.
-- Paid API calls made: **0**.
-- Stages 1–6: **NOT_VERIFIED**.
-- Fixture harness validation: 3/3 (separate from live capability).
+- HKGAI key/base/model: **configured locally in `.env`** (not committed).
+- Configured model: `t2_hkgai-v3_fp8_1m_e7`.
+- Response-reported model in Stage 1: `t2_hkgai-v3_fp8_1m_e10_meeting`.
+- Base URL correction: the course base host required a `/v1` prefix; the initial
+  host-only URL returned HTTP 404.
+- Stage 1 connectivity: **PASSED** — real non-empty response (`OK`),
+  `finish_reason=stop`, usage 125 tokens, elapsed 5.98s.
+- Stage 2 structured output: **FAILED** — HKGAI disconnected the connection after
+  ~65–67s on the real Coordinator planning prompt
+  (`RemoteProtocolError: Server disconnected without sending a response`).
+- Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
+- Actual requests: 5 in Stage 1 work (including diagnostics), 4 in Stage 2 work;
+  total 9. Tokens: 376 in Stage 1 work; 0 returned in Stage 2 work.
+- Paid calls were limited to the authorized HKGAI endpoint; no other provider was
+  used.
+- API key scan: not present in tracked files, stage JSON/Markdown, runtime logs or
+  benchmark reports.
 
-Required external conditions to proceed:
+Required next action:
 
-1. supply the course-authorized DeepSeek/HKGAI key and endpoint through
-   environment variables or `.env` (never paste keys into chat/logs);
-2. explicitly authorize paid calls with `--allow-live-api`;
-3. set a request/token budget;
-4. run Stage 1, then 2, then 3, then 4, then 5, then 6; fix any stage failure
-   before advancing.
+1. Resolve the HKGAI gateway disconnect on structured planning requests with the
+   course provider (supported model/route, gateway timeout or streaming policy).
+   The existing 60–90s client timeout is not the limiting factor; the server
+   closes the connection.
+2. Do not use a different model/provider without explicit authorization.
+3. After Stage 2 passes, continue Stage 3 → 4 → 5 → 6 with fresh request/token
+   budgets.
+4. Real-user HITL and official test-set evaluation remain pending.
 
 ## 7. Output and audit
 

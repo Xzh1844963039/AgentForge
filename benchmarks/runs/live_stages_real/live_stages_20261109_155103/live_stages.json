@@ -1,0 +1,47 @@
+{
+  "provider": "hkgai",
+  "model": "t2_hkgai-v3_fp8_1m_e7",
+  "git_commit": "606c6e554703f8c588c3817210784cb8b690586f",
+  "api_key_configured": true,
+  "live_api_allowed": true,
+  "created_at": "2026-11-09T07:51:03.633214Z",
+  "overall_status": "FAILED",
+  "stages": [
+    {
+      "stage": 1,
+      "stage_id": "connectivity",
+      "name": "Connectivity smoke test",
+      "status": "FAILED",
+      "detail": "non-empty=False, usage_total=121",
+      "metrics": {
+        "content_chars": 0,
+        "prompt_tokens": 89,
+        "completion_tokens": 32,
+        "total_tokens": 121,
+        "provider": "hkgai",
+        "model": "t2_hkgai-v3_fp8_1m_e10_meeting",
+        "budget_after_stage": {
+          "requests": 1,
+          "tokens": 121,
+          "max_requests": 5,
+          "max_tokens": 10000,
+          "request_budget_exceeded": false,
+          "token_budget_exceeded": false
+        }
+      },
+      "started_at": "2026-11-09T07:51:03.633214Z",
+      "finished_at": "2026-11-09T07:51:11.411508Z",
+      "output_dir": "benchmarks\\runs\\live_stages_real\\live_stages_20261109_155103\\stage_1_connectivity"
+    }
+  ],
+  "budget": {
+    "requests": 1,
+    "tokens": 121,
+    "max_requests": 5,
+    "max_tokens": 10000,
+    "request_budget_exceeded": false,
+    "token_budget_exceeded": false
+  },
+  "memory_experiment": null,
+  "notes": []
+}

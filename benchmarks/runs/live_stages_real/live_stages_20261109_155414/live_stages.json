@@ -1,0 +1,41 @@
+{
+  "provider": "hkgai",
+  "model": "t2_hkgai-v3_fp8_1m_e7",
+  "git_commit": "606c6e554703f8c588c3817210784cb8b690586f",
+  "api_key_configured": true,
+  "live_api_allowed": true,
+  "created_at": "2026-11-09T07:54:14.480037Z",
+  "overall_status": "FAILED",
+  "stages": [
+    {
+      "stage": 2,
+      "stage_id": "structured_output",
+      "name": "Structured plan and action",
+      "status": "FAILED",
+      "detail": "structured output failed: LLMProviderError: hkgai transport error after 67540 ms: RemoteProtocolError: Server disconnected without sending a response.",
+      "metrics": {
+        "budget_after_stage": {
+          "requests": 1,
+          "tokens": 0,
+          "max_requests": 5,
+          "max_tokens": 10000,
+          "request_budget_exceeded": false,
+          "token_budget_exceeded": false
+        }
+      },
+      "started_at": "2026-11-09T07:54:14.480037Z",
+      "finished_at": "2026-11-09T07:55:22.063680Z",
+      "output_dir": "benchmarks\\runs\\live_stages_real\\live_stages_20261109_155414\\stage_2_structured_output"
+    }
+  ],
+  "budget": {
+    "requests": 1,
+    "tokens": 0,
+    "max_requests": 5,
+    "max_tokens": 10000,
+    "request_budget_exceeded": false,
+    "token_budget_exceeded": false
+  },
+  "memory_experiment": null,
+  "notes": []
+}

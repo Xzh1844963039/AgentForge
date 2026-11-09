@@ -273,7 +273,7 @@ class LiveStageRunner:
                     _user("Reply with exactly OK."),
                 ],
                 purpose="live_stage1_connectivity",
-                max_tokens=32,
+                max_tokens=256,
             )
         except Exception as exc:
             result.status = "FAILED"
@@ -288,12 +288,14 @@ class LiveStageRunner:
             "total_tokens": usage.total_tokens,
             "provider": response.provider,
             "model": response.model,
+            "finish_reason": response.finish_reason,
         }
         passed = bool(response.content.strip()) and usage.total_tokens > 0
         result.status = "PASSED" if passed else "FAILED"
         result.detail = (
             f"non-empty={bool(response.content.strip())}, "
-            f"usage_total={usage.total_tokens}"
+            f"usage_total={usage.total_tokens}, "
+            f"finish_reason={response.finish_reason}"
         )
         result.finished_at = utc_now()
         return result

@@ -4,8 +4,10 @@
 **Phase:** 6A — Real-LLM acceptance framework, provider hardening, final readiness
 **Environment:** Windows 11 (10.0.26200), Python 3.12.10, Docker Desktop 29.9.2
 **Version:** 0.6.0
-**Status:** Engineering complete for offline validation. **Real-LLM stages are
-NOT_VERIFIED: no API key was configured and no paid API call was made.**
+**Status:** Engineering complete for offline validation. A later authorized
+HKGAI run (2026-11-09) passed Stage 1 connectivity but Stage 2 structured planning
+was blocked by a server-side disconnect; see `docs/HKGAI_ACCEPTANCE_RUN.md`.
+Stages 3–6, real-LLM HITL and memory reuse remain NOT_VERIFIED.
 
 ---
 
