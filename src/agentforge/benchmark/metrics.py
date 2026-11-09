@@ -84,7 +84,13 @@ def collect_run_metrics(
         for execution in executions
         if "AgentOutputError" in (execution.error or "")
         or "invalid agent action" in (execution.error or "").lower()
+        or execution.metadata.get("parse_error") is not None
     ]
+    structured_repairs = sum(
+        int(execution.metadata.get("repair_count", 0) or 0)
+        for execution in executions
+        if execution.metadata.get("final")
+    )
     schema_failures = [
         call
         for call in tool_calls
@@ -130,6 +136,7 @@ def collect_run_metrics(
         invalid_json_rate=(
             len(invalid_json) / len(executions) if executions else 0.0
         ),
+        structured_repair_count=structured_repairs,
         tool_schema_error_rate=(
             len(schema_failures) / len(tool_calls) if tool_calls else 0.0
         ),
@@ -264,6 +271,9 @@ def aggregate_runs(runs: Iterable[BenchmarkRun]) -> AggregateMetrics:
             tool_failures / tool_calls if tool_calls else 0.0
         ),
         total_retries=sum(run.metrics.retry_count for run in records),
+        total_structured_repairs=sum(
+            run.metrics.structured_repair_count for run in records
+        ),
         total_delegations=delegations,
         delegation_success_rate=(
             sum(delegation_success) / len(delegation_success)

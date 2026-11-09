@@ -27,6 +27,94 @@ class BenchmarkBudgetExceeded(RuntimeError):
         self.used = used
 
 
+class LiveBudgetExceeded(RuntimeError):
+    def __init__(self, budget_type: str, limit: int, used: int) -> None:
+        super().__init__(
+            f"live {budget_type} budget exceeded (limit={limit}, used={used})"
+        )
+        self.budget_type = budget_type
+        self.limit = limit
+        self.used = used
+
+
+class LiveBudgetProvider(BaseLLMProvider):
+    """Cumulative request/token guard shared across live acceptance stages.
+
+    ``aclose`` is intentionally a no-op so per-task runtimes cannot close the
+    shared HTTP client; the stage runner closes the underlying provider once all
+    stages finish.
+    """
+
+    def __init__(
+        self,
+        provider: BaseLLMProvider,
+        *,
+        max_requests: int = 60,
+        max_tokens: int = 120_000,
+    ) -> None:
+        super().__init__(
+            default_temperature=provider.default_temperature,
+            default_max_tokens=provider.default_max_tokens,
+        )
+        self.provider = provider
+        self.name = provider.name
+        self.model = provider.model
+        self.max_requests = max(1, max_requests)
+        self.max_tokens = max(1, max_tokens)
+        self.requests = 0
+        self.tokens = 0
+        self.request_budget_exceeded = False
+        self.token_budget_exceeded = False
+
+    async def complete(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        purpose: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResponse:
+        if self.requests >= self.max_requests:
+            self.request_budget_exceeded = True
+            raise LiveBudgetExceeded(
+                "request", self.max_requests, self.requests
+            )
+        if self.tokens >= self.max_tokens:
+            self.token_budget_exceeded = True
+            raise LiveBudgetExceeded("token", self.max_tokens, self.tokens)
+        self.requests += 1
+        response = await self.provider.complete(
+            messages,
+            purpose=purpose,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        usage = response.usage
+        self.tokens += (
+            usage.total_tokens
+            or usage.prompt_tokens + usage.completion_tokens
+        )
+        if self.tokens > self.max_tokens:
+            self.token_budget_exceeded = True
+        return response
+
+    async def aclose(self) -> None:
+        return None
+
+    async def close_underlying(self) -> None:
+        await self.provider.aclose()
+
+    def snapshot(self) -> dict[str, int | bool]:
+        return {
+            "requests": self.requests,
+            "tokens": self.tokens,
+            "max_requests": self.max_requests,
+            "max_tokens": self.max_tokens,
+            "request_budget_exceeded": self.request_budget_exceeded,
+            "token_budget_exceeded": self.token_budget_exceeded,
+        }
+
+
 def _tool_result_count(prompt: str) -> int:
     return prompt.count("[TOOL_RESULTS]")
 

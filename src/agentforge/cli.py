@@ -324,6 +324,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(benchmark_live, suppress_defaults=True)
     benchmark_live.add_argument("--output-dir", default="benchmarks/runs")
     benchmark_live.add_argument("--allow-live-api", action="store_true")
+    benchmark_live.add_argument(
+        "--stage",
+        choices=["all", "1", "2", "3", "4", "5", "6"],
+        help="run staged acceptance instead of the full acceptance report",
+    )
+    benchmark_live.add_argument("--max-requests", type=int, default=120)
+    benchmark_live.add_argument("--max-tokens", type=int, default=250_000)
+    benchmark_live.add_argument("--skip-memory", action="store_true")
 
     return parser
 

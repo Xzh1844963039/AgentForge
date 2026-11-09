@@ -178,6 +178,10 @@ class AgentForgeRuntime:
             memory_recall_limit=self.settings.memory_recall_limit,
             tool_executor=self.tool_executor,
             max_tool_calls=self.settings.max_tool_calls_per_task,
+            max_output_repairs=self.settings.structured_output_repairs,
+            require_structured_actions=self.settings.require_structured_actions,
+            max_task_tokens=self.settings.max_task_tokens,
+            max_repeated_tool_actions=self.settings.max_repeated_tool_actions,
         ):
             self.agents.register(agent)
 

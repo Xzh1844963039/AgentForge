@@ -346,6 +346,9 @@ class _FunctionProvider(MockProvider):
 
 @pytest.mark.docker
 async def test_docker_container_death_is_recovered_by_restart(tmp_path):
+    available, detail = DockerSandbox.check_available()
+    if not available:
+        pytest.skip(f"Docker unavailable: {detail}")
     config = SandboxConfig(
         image="python:3.11-slim",
         workspace_root=tmp_path / "workspaces",

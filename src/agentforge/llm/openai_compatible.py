@@ -64,6 +64,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
     @property
     def endpoint(self) -> str:
+        if self._base_url.endswith("/chat/completions"):
+            return self._base_url
         return f"{self._base_url}/chat/completions"
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -124,6 +126,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
                 if response.status_code >= 400:
                     detail = response.text[:500].replace("\n", " ")
+                    detail = detail.replace(self._api_key, "[REDACTED]")
                     error = LLMProviderError(
                         f"{self.name} request failed with HTTP "
                         f"{response.status_code}: {detail}",
@@ -184,7 +187,21 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
         try:
             choice = data["choices"][0]
-            content = choice["message"]["content"] or ""
+            raw_content = choice["message"]["content"]
+            if raw_content is None:
+                content = ""
+            elif isinstance(raw_content, str):
+                content = raw_content
+            elif isinstance(raw_content, list):
+                # Some compatible providers return content parts.
+                content = "".join(
+                    str(part.get("text", ""))
+                    if isinstance(part, dict)
+                    else str(part)
+                    for part in raw_content
+                )
+            else:
+                content = str(raw_content)
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMProviderError(
                 f"{self.name} returned an unexpected response shape "

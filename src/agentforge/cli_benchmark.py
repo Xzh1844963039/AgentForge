@@ -234,6 +234,62 @@ async def _live(args: argparse.Namespace, settings_factory, console: Console) ->
     from agentforge.benchmark.live import LiveAcceptanceRunner
 
     settings = settings_factory(args)
+    stage = getattr(args, "stage", None)
+    if stage is not None:
+        from agentforge.benchmark.live_stages import LiveStageRunner
+
+        start_stage = 1
+        end_stage = 6
+        if stage != "all":
+            start_stage = end_stage = int(stage)
+        stage_runner = LiveStageRunner(
+            settings,
+            allow_live_api=args.allow_live_api,
+            output_dir=args.output_dir,
+            max_requests=args.max_requests,
+            max_tokens=args.max_tokens,
+            start_stage=start_stage,
+            end_stage=end_stage,
+            run_memory_experiment=not args.skip_memory,
+        )
+        stage_report = await stage_runner.run()
+        table = Table(
+            title=f"Staged live acceptance: {stage_report.overall_status}"
+        )
+        table.add_column("Stage", justify="right")
+        table.add_column("Name")
+        table.add_column("Status")
+        table.add_column("Detail")
+        for result in stage_report.stages:
+            table.add_row(
+                str(result.stage),
+                result.name,
+                result.status,
+                result.detail[:140],
+            )
+        console.print(table)
+        console.print(
+            Text(
+                f"Budget: requests={stage_report.budget.get('requests', 0)}/"
+                f"{stage_report.budget.get('max_requests', args.max_requests)}, "
+                f"tokens={stage_report.budget.get('tokens', 0)}/"
+                f"{stage_report.budget.get('max_tokens', args.max_tokens)}"
+            )
+        )
+        if stage_report.overall_status == "NOT_VERIFIED":
+            console.print(
+                Text(
+                    "NOT VERIFIED: no API key or explicit --allow-live-api; "
+                    "no paid API call was made.",
+                    style="bold yellow",
+                )
+            )
+        return (
+            0
+            if stage_report.overall_status in {"PASSED", "NOT_VERIFIED"}
+            else 1
+        )
+
     runner = LiveAcceptanceRunner(
         settings,
         allow_live_api=args.allow_live_api,

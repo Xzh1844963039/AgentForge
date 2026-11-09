@@ -41,6 +41,7 @@ from agentforge.benchmark.report import (
     write_jsonl,
 )
 from agentforge.benchmark.verification import BenchmarkVerifier
+from agentforge.llm.base import BaseLLMProvider
 from agentforge.models.common import utc_now
 from agentforge.models.tool import ApprovalStatus
 from agentforge.models.workflow import Workflow, WorkflowStatus
@@ -79,8 +80,14 @@ def git_commit_hash() -> str | None:
 
 
 class BenchmarkRunner:
-    def __init__(self, config: BenchmarkConfig) -> None:
+    def __init__(
+        self,
+        config: BenchmarkConfig,
+        *,
+        provider_override: BaseLLMProvider | None = None,
+    ) -> None:
         self.config = config
+        self.provider_override = provider_override
         self.dataset = load_dataset(config.dataset_path)
         self.git_commit = git_commit_hash()
 
@@ -235,7 +242,12 @@ class BenchmarkRunner:
         timed_out = False
         run_error: str | None = None
         try:
-            handle = await create_benchmark_runtime(task, self.config, data_dir)
+            handle = await create_benchmark_runtime(
+                task,
+                self.config,
+                data_dir,
+                provider_override=self.provider_override,
+            )
             active_seconds, human_wait_seconds, timed_out, workflow = (
                 await self._drive_workflow(task, handle, human_interactions)
             )
@@ -261,6 +273,20 @@ class BenchmarkRunner:
                     except Exception:
                         logger.exception("benchmark cleanup failed")
                     workflow = handle.runtime.get_workflow(workflows[0].workflow_id)
+        if (
+            self.config.memory_feedback
+            and handle is not None
+            and workflow is not None
+            and workflow.status == WorkflowStatus.COMPLETED
+        ):
+            try:
+                handle.runtime.memory_engine.process_workflow(
+                    workflow.workflow_id, learn=False
+                )
+            except Exception as exc:
+                notes.append(
+                    f"memory feedback failed: {type(exc).__name__}: {exc}"
+                )
         end_to_end = time.monotonic() - started_monotonic
         verification: VerificationResult | None = None
         if handle is not None and workflow is not None and not timed_out:
@@ -300,12 +326,18 @@ class BenchmarkRunner:
                 notes.append(f"metric collection error: {type(exc).__name__}: {exc}")
             if metrics.tool_budget_exceeded:
                 run_status = RunStatus.FAILED
+                metrics.goal_success = False
                 notes.append(
                     f"tool budget exceeded: {metrics.tool_calls} > {task.tool_budget}"
                 )
             if metrics.time_budget_exceeded:
                 run_status = RunStatus.FAILED
+                metrics.goal_success = False
                 notes.append("task exceeded its time budget")
+            if metrics.token_budget_exceeded:
+                run_status = RunStatus.FAILED
+                metrics.goal_success = False
+                notes.append("task exceeded its token budget")
         workflow_status = workflow.status if workflow is not None else None
         workflow_error = workflow.error if workflow is not None else run_error
         final_preview = (workflow.final_result or "")[:1000] if workflow else ""
@@ -332,6 +364,7 @@ class BenchmarkRunner:
             workflow_status=workflow_status,
             workflow_error=workflow_error,
             final_result_preview=final_preview,
+            run_data_dir=str(data_dir),
             metrics=metrics,
             human_interactions=human_interactions,
             config_snapshot={
@@ -339,6 +372,7 @@ class BenchmarkRunner:
                 "provider_kind": self.config.provider_kind.value,
                 "memory_evolution": self.config.memory_evolution,
                 "memory_recall": self.config.memory_recall,
+                "memory_feedback": self.config.memory_feedback,
                 "time_budget_seconds": task.time_budget_seconds,
                 "token_budget": task.token_budget,
                 "tool_budget": task.tool_budget,

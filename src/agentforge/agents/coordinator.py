@@ -106,8 +106,9 @@ class CoordinatorAgent(BaseAgent):
         attempts: list[PlanningAttempt] = []
         last_error: Exception | None = None
         messages = base_messages
+        max_attempts = 1 + self.max_output_repairs
 
-        for attempt_index in range(2):
+        for attempt_index in range(max_attempts):
             started = utc_now()
             response = await self.provider.complete(messages, purpose="plan")
             finished = utc_now()
@@ -128,7 +129,7 @@ class CoordinatorAgent(BaseAgent):
                         error=str(exc),
                     )
                 )
-                if attempt_index == 0:
+                if attempt_index < max_attempts - 1:
                     messages = [
                         *base_messages,
                         ChatMessage.assistant(response.content),
@@ -155,7 +156,7 @@ class CoordinatorAgent(BaseAgent):
             )
 
         message = (
-            "Coordinator failed to produce a valid execution plan after 2 "
-            f"attempts. Last error: {last_error}"
+            "Coordinator failed to produce a valid execution plan after "
+            f"{max_attempts} attempt(s). Last error: {last_error}"
         )
         raise PlanningError(message, attempts=attempts)

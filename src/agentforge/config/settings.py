@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     max_reassignments: int = Field(default=2, ge=0, le=10)
     max_execution_steps: int = Field(default=30, ge=1, le=200)
     max_tasks_per_workflow: int = Field(default=60, ge=1, le=500)
+    max_llm_calls_per_workflow: int = Field(default=200, ge=1, le=5000)
+    max_task_tokens: int = Field(default=120_000, ge=1000, le=2_000_000)
+    max_repeated_tool_actions: int = Field(default=3, ge=1, le=20)
+    structured_output_repairs: int = Field(default=1, ge=0, le=5)
+    require_structured_actions: bool = True
     enable_final_review: bool = True
 
     # --- Tools -----------------------------------------------------------------

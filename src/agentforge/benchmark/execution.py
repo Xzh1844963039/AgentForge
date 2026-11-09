@@ -112,6 +112,10 @@ def _single_agent_runtime(runtime: AgentForgeRuntime) -> None:
         memory_recall_limit=runtime.settings.memory_recall_limit,
         tool_executor=runtime.tool_executor,
         max_tool_calls=runtime.settings.max_tool_calls_per_task,
+        max_output_repairs=runtime.settings.structured_output_repairs,
+        require_structured_actions=runtime.settings.require_structured_actions,
+        max_task_tokens=runtime.settings.max_task_tokens,
+        max_repeated_tool_actions=runtime.settings.max_repeated_tool_actions,
     )
     for permission in ToolPermission:
         runtime.tool_policy.grant(SOLO_AGENT_ID, permission)
@@ -149,11 +153,15 @@ async def create_benchmark_runtime(
     task: BenchmarkTask,
     config: BenchmarkConfig,
     data_dir: Path,
+    *,
+    provider_override: BaseLLMProvider | None = None,
 ) -> BenchmarkRuntimeHandle:
     settings = benchmark_settings(task, config, data_dir)
     settings.ensure_directories()
     base_provider: BaseLLMProvider
-    if config.provider_kind == ProviderKind.FIXTURE:
+    if provider_override is not None:
+        base_provider = provider_override
+    elif config.provider_kind == ProviderKind.FIXTURE:
         base_provider = FixturePolicyProvider(task)
     else:
         base_provider = build_llm_provider(settings)

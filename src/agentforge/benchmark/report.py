@@ -206,11 +206,26 @@ def render_benchmark_report(
     lines.append(f"| Total tool calls | {aggregate.total_tool_calls} |")
     lines.append(f"| Tool failure rate | {_pct(aggregate.tool_failure_rate)} |")
     lines.append(f"| Retries (repeated identical calls) | {aggregate.total_retries} |")
+    lines.append(
+        f"| Structured-output repairs | {aggregate.total_structured_repairs} |"
+    )
     lines.append(f"| Delegations / success rate | {aggregate.total_delegations} / {_pct(aggregate.delegation_success_rate)} |")
     lines.append(f"| Memory retrievals / used | {aggregate.total_memory_retrievals} / {aggregate.total_memory_usage} |")
     lines.append(f"| Approvals / clarifications | {aggregate.total_approvals} / {aggregate.total_clarifications} |")
     lines.append(f"| Recovery success rate | {_pct(aggregate.recovery_success_rate)} |")
     lines.append(f"| Crash/timeout rate | {_pct(aggregate.crash_or_timeout_rate)} |")
+    lines.append("")
+    lines.append(
+        f"Sample size: **{aggregate.total_runs} runs**. Per-category rates are "
+        "descriptive; no confidence intervals or statistical significance are "
+        "claimed. `needs_review` and `skipped` are not successes."
+    )
+    lines.append("")
+    lines.append(
+        "Token counts come from provider usage for live runs and prompt/response "
+        "length estimates for fixture runs; they must not be compared as if both "
+        "were billed API tokens."
+    )
     lines.append("")
 
     lines.append("## 2. Results by category")

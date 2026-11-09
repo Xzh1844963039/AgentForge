@@ -96,6 +96,10 @@ def build_default_agents(
     memory_recall_limit: int = 4,
     tool_executor: ToolExecutor | None = None,
     max_tool_calls: int = 6,
+    max_output_repairs: int = 1,
+    require_structured_actions: bool = True,
+    max_task_tokens: int = 120_000,
+    max_repeated_tool_actions: int = 3,
 ) -> list[BaseAgent]:
     agents: list[BaseAgent] = []
     for profile in DEFAULT_PROFILES:
@@ -109,6 +113,10 @@ def build_default_agents(
                 memory_recall_limit=memory_recall_limit,
                 tool_executor=tool_executor,
                 max_tool_calls=max_tool_calls,
+                max_output_repairs=max_output_repairs,
+                require_structured_actions=require_structured_actions,
+                max_task_tokens=max_task_tokens,
+                max_repeated_tool_actions=max_repeated_tool_actions,
             )
         )
     return agents

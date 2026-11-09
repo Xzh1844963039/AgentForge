@@ -270,6 +270,7 @@ class BenchmarkConfig(BaseModel):
     live_api_allowed: bool = False
     memory_evolution: bool = False
     memory_recall: bool = False
+    memory_feedback: bool = False
     shared_memory_file: str | None = None
     learning_task_ids: list[str] = Field(default_factory=list)
     fail_fast: bool = False
@@ -332,6 +333,7 @@ class RunMetrics(BaseModel):
     token_budget_exceeded: bool = False
     time_budget_exceeded: bool = False
     invalid_json_rate: float = 0.0
+    structured_repair_count: int = 0
     tool_schema_error_rate: float = 0.0
     plan_validation_failure_rate: float = 0.0
     tool_calling_success_rate: float = 0.0
@@ -366,6 +368,7 @@ class BenchmarkRun(BaseModel):
     workflow_status: WorkflowStatus | None = None
     workflow_error: str | None = None
     final_result_preview: str = ""
+    run_data_dir: str | None = None
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     failure: FailureAnalysis | None = None
     human_interactions: list[HumanInteractionRecord] = Field(default_factory=list)
@@ -422,6 +425,7 @@ class AggregateMetrics(BaseModel):
     total_tool_calls: int = 0
     tool_failure_rate: float = 0.0
     total_retries: int = 0
+    total_structured_repairs: int = 0
     total_delegations: int = 0
     delegation_success_rate: float = 0.0
     total_memory_retrievals: int = 0

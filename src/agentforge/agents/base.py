@@ -88,6 +88,7 @@ class LLMCall(BaseModel):
     started_at: datetime
     finished_at: datetime
     purpose: str
+    parse_error: str | None = None
 
 
 class AgentRunResult(BaseModel):
@@ -98,6 +99,7 @@ class AgentRunResult(BaseModel):
     tool_results: list[ToolResult] = Field(default_factory=list)
     memory_hits: list[str] = Field(default_factory=list)
     parse_warning: str | None = None
+    repair_count: int = 0
 
     @property
     def content(self) -> str:
@@ -153,6 +155,10 @@ class BaseAgent:
         memory_recall_limit: int = 4,
         tool_executor: ToolExecutor | None = None,
         max_tool_calls: int = 6,
+        max_output_repairs: int = 1,
+        require_structured_actions: bool = True,
+        max_task_tokens: int = 120_000,
+        max_repeated_tool_actions: int = 3,
     ) -> None:
         self.profile = profile
         self.provider = provider
@@ -161,6 +167,10 @@ class BaseAgent:
         self.memory_recall_limit = memory_recall_limit
         self.tool_executor = tool_executor
         self.max_tool_calls = max(1, max_tool_calls)
+        self.max_output_repairs = max(0, max_output_repairs)
+        self.require_structured_actions = require_structured_actions
+        self.max_task_tokens = max(1000, max_task_tokens)
+        self.max_repeated_tool_actions = max(1, max_repeated_tool_actions)
         self._inbox: list[Message] = []
         self._task_states: dict[str, TaskStatus] = {}
         self._active_task_id: str | None = None
@@ -289,8 +299,10 @@ class BaseAgent:
             (token.tool_name, token.argument_digest): token
             for token in approval_tokens
         }
+        call_counts: dict[tuple[str, str], int] = {}
 
-        max_turns = self.max_tool_calls + 3
+        max_turns = self.max_tool_calls + 3 + self.max_output_repairs
+        repair_count = 0
         for _turn in range(max_turns):
             self._raise_on_control(control_check)
             started = utc_now()
@@ -304,9 +316,56 @@ class BaseAgent:
                     purpose=purpose,
                 )
             )
-            action, warning = parse_agent_action(response.content)
+            total_tokens = sum(
+                call.response.usage.total_tokens
+                or call.response.usage.prompt_tokens
+                + call.response.usage.completion_tokens
+                for call in calls
+            )
+            if total_tokens > self.max_task_tokens:
+                return self._failed_tool_result(
+                    response,
+                    calls,
+                    tool_results,
+                    memory_hits,
+                    "maximum task tokens exceeded "
+                    f"(used={total_tokens}, max={self.max_task_tokens})",
+                    purpose,
+                    repair_count=repair_count,
+                )
+
+            try:
+                action, warning = parse_agent_action(response.content)
+                if self.require_structured_actions and warning is not None:
+                    raise AgentOutputError(warning)
+            except AgentOutputError as exc:
+                calls[-1].parse_error = str(exc)
+                last_warning = str(exc)
+                if repair_count < self.max_output_repairs:
+                    repair_count += 1
+                    messages.append(ChatMessage.assistant(response.content))
+                    messages.append(
+                        ChatMessage.user(
+                            "[REPAIR]\n"
+                            f"Your previous response was invalid: {exc}\n"
+                            "Return exactly one JSON action object only, with no "
+                            "Markdown fences or prose. Use one of: complete, "
+                            "tool_call, delegate, clarify, reject_assignment, fail."
+                        )
+                    )
+                    continue
+                return self._failed_tool_result(
+                    response,
+                    calls,
+                    tool_results,
+                    memory_hits,
+                    "invalid structured action after "
+                    f"{repair_count} repair attempt(s): {exc}",
+                    purpose,
+                    parse_warning=str(exc),
+                    repair_count=repair_count,
+                )
             last_action = action
-            last_warning = warning
 
             if action.action == AgentActionType.CLARIFY:
                 raise AgentSuspension(
@@ -327,6 +386,7 @@ class BaseAgent:
                     tool_results=tool_results,
                     memory_hits=memory_hits,
                     parse_warning=warning,
+                    repair_count=repair_count,
                 )
 
             if self.tool_executor is None or tool_context is None:
@@ -337,6 +397,7 @@ class BaseAgent:
                     memory_hits,
                     "tool execution is not configured for this agent",
                     purpose,
+                    repair_count=repair_count,
                 )
 
             if len(tool_results) + len(action.tool_calls) > self.max_tool_calls:
@@ -347,15 +408,28 @@ class BaseAgent:
                     memory_hits,
                     f"maximum tool calls exceeded (max={self.max_tool_calls})",
                     purpose,
+                    repair_count=repair_count,
                 )
 
             messages.append(ChatMessage.assistant(response.content))
             payloads: list[dict[str, Any]] = []
             for call in action.tool_calls:
                 self._raise_on_control(control_check)
-                token = token_map.get(
-                    (call.name, arguments_digest(call.arguments))
-                )
+                signature = (call.name, arguments_digest(call.arguments))
+                call_counts[signature] = call_counts.get(signature, 0) + 1
+                if call_counts[signature] > self.max_repeated_tool_actions:
+                    return self._failed_tool_result(
+                        response,
+                        calls,
+                        tool_results,
+                        memory_hits,
+                        "repeated identical tool action exceeded "
+                        f"max_repeated_tool_actions="
+                        f"{self.max_repeated_tool_actions}",
+                        purpose,
+                        repair_count=repair_count,
+                    )
+                token = token_map.get(signature)
                 try:
                     result = await self.tool_executor.execute(
                         call,
@@ -412,6 +486,7 @@ class BaseAgent:
             purpose,
             last_action=last_action,
             parse_warning=last_warning,
+            repair_count=repair_count,
         )
 
     @staticmethod
@@ -441,6 +516,7 @@ class BaseAgent:
         *,
         last_action: AgentAction | None = None,
         parse_warning: str | None = None,
+        repair_count: int = 0,
     ) -> AgentRunResult:
         action = AgentAction(
             action=AgentActionType.FAIL,
@@ -457,6 +533,7 @@ class BaseAgent:
             tool_results=tool_results,
             memory_hits=memory_hits,
             parse_warning=parse_warning or f"tool loop aborted: {error}",
+            repair_count=repair_count,
         )
 
     async def respond_to_chat(

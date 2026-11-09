@@ -20,6 +20,7 @@ from agentforge.models.common import utc_now
 
 
 LIVE_TASK_IDS = [
+    "file_exact_create",
     "research_basic_facts",
     "plan_research_to_coding",
     "codegen_add_function",

@@ -628,6 +628,14 @@ class TaskOrchestrator:
                 f"{self.settings.max_execution_steps}"
             )
         ctx.steps += 1
+        llm_calls = len(
+            self.store.list_executions(ctx.workflow.workflow_id)
+        )
+        if llm_calls >= self.settings.max_llm_calls_per_workflow:
+            raise OrchestrationError(
+                "workflow exceeded max_llm_calls_per_workflow="
+                f"{self.settings.max_llm_calls_per_workflow}"
+            )
 
         if not task.assigned_agent:
             self._fail_task_without_execution(ctx, task, "task has no assigned agent")
@@ -722,6 +730,8 @@ class TaskOrchestrator:
                 ctx, task, f"agent execution failed: {type(exc).__name__}: {exc}"
             )
             return
+
+        task.metadata["action_repair_count"] = result.repair_count
 
         tool_call_ids = [
             str(item.metadata["tool_call_id"])
@@ -1410,6 +1420,8 @@ class TaskOrchestrator:
                     ),
                     "tool_results": len(result.tool_results),
                     "parse_warning": result.parse_warning if is_last else None,
+                    "parse_error": call.parse_error,
+                    "repair_count": result.repair_count,
                 },
             )
             self.store.save_execution(execution)
