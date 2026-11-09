@@ -298,7 +298,7 @@ than adding features.
   and live acceptance.
 - 34 internal dev tasks across 10 categories, each with objective checks or an
   explicit manual-review requirement.
-- 8 live tasks with fixture actions removed; live calls require a key and explicit
+- 9 live tasks with fixture actions removed; live calls require a key and explicit
   `--allow-live-api`.
 - Resumable batches with JSON/JSONL/CSV/Markdown exports and Git commit capture.
 - A/B/C ablation with separate learning/evaluation tasks.
@@ -338,7 +338,41 @@ scores as model performance.
 
 ---
 
-## Phase 6 — External integrations and real-provider hardening (next)
+## Phase 6A — Real-LLM acceptance framework and integration hardening ✅ Complete (offline; live NOT VERIFIED)
+
+**Goal:** make authorized DeepSeek/HKGAI execution reliable, measurable and
+fail-safe without pretending a key exists.
+
+### Delivered
+
+- Provider compatibility: configurable full endpoint URLs, content-part response
+  normalization, usage parsing, auth/rate-limit/timeout propagation, key redaction.
+- Bounded, audited structured action/plan repair; plain text rejected in task mode.
+- Per-task token, workflow LLM-call and repeated-identical-tool-action guards.
+- Six-stage live acceptance runner with cumulative request/token budgets and
+  explicit `--allow-live-api`.
+- Live memory learning/evaluation protocol with retrieval/applied IDs and action
+  comparison.
+- Benchmark correctness fixes (budget success semantics, sample/token-source caveats).
+- Provider/repair/budget/staged-live/correctness tests and final readiness docs.
+- `docs/REAL_LLM_ACCEPTANCE.md`, `docs/PHASE6A_REPORT.md`,
+  `docs/FINAL_EVALUATION_PROTOCOL.md`, `docs/FINAL_SUBMISSION_CHECKLIST.md`.
+
+### Verification status
+
+```text
+Offline suite: see final hand-off (Phase 6A additions included)
+Docker tests: 5
+Fixture benchmark: unchanged 33/34 + 1 manual review
+Live stages 1–6: NOT_VERIFIED — no API key, no paid call
+```
+
+Blocked external inputs: course-authorized DeepSeek/HKGAI key/base/model,
+explicit paid-call authorization, official teacher test set, real-user HITL.
+
+---
+
+## Phase 6 — Authorized live execution, external integrations and final acceptance (next)
 
 **Goal:** validate real search/GitHub/LLM behavior, run live acceptance with
 explicit authorization, and harden external I/O.
@@ -429,18 +463,19 @@ explicit authorization, and harden external I/O.
 
 ## Recommended next step
 
-Proceed to **Phase 6 — External integrations and real-provider hardening**:
+Proceed to **Phase 6 — Authorized live execution and final acceptance**:
 
-1. run authorized DeepSeek/HKGAI acceptance tests for planning, tools, approvals,
-   clarification and resume behavior;
-2. execute the live benchmark with explicit permission and a cost cap; compare
-   against the fixture baseline without conflating them;
-3. validate live search and citation grounding;
-4. harden GitHub/Git operations with least-privilege credentials and dry runs;
-5. add prompt-injection/tool-output adversarial tests and secret scanning;
-6. preserve Phase 4/5 invariants: final enforcement in `ToolExecutor`, exact argument
-   binding, task-scoped memory feedback, durable lifecycle transitions, objective
-   benchmark verification and reconciliation before replay.
+1. supply course-authorized DeepSeek/HKGAI credentials through environment/`.env`
+   and explicitly authorize paid calls;
+2. run stages 1–6 in order with the documented request/token budget; fix each
+   stage before advancing;
+3. run the live memory learning/evaluation split and report retrieval/applied IDs
+   and action changes honestly;
+4. adapt the official teacher test set using `docs/FINAL_EVALUATION_PROTOCOL.md`;
+5. validate live search and citation grounding if it is part of the official set;
+6. preserve Phase 4/5/6A invariants: final enforcement in `ToolExecutor`, exact
+   argument binding, task-scoped memory feedback, objective benchmark verification,
+   structured-output repair and reconciliation before replay.
 
 Real-LLM HITL, memory learning, live benchmark performance and resume quality remain
 explicitly NOT VERIFIED until those API acceptance runs exist. Do not auto-advance.

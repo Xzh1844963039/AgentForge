@@ -1,0 +1,42 @@
+{
+  "batch_id": "batch_40a9d23aba8543db9689b2f61182dbea",
+  "dataset_id": "dev",
+  "dataset_path": "D:\\5202nlp课程project\\benchmarks\\dev\\tasks.jsonl",
+  "git_commit": "18ceabec488d7bf65e315cb59889a2216a9a464f",
+  "config": {
+    "dataset_path": "benchmarks/dev/tasks.jsonl",
+    "output_dir": "benchmarks\\runs\\live_official_6a\\live_harness",
+    "mode": "multi_agent",
+    "provider_kind": "fixture",
+    "provider_name": "mock",
+    "model": null,
+    "task_ids": [
+      "file_exact_create",
+      "approval_delete_rejected",
+      "clarification_retention"
+    ],
+    "categories": [],
+    "repeats": 1,
+    "max_tasks": null,
+    "resume": false,
+    "batch_dir": null,
+    "live_api_allowed": false,
+    "memory_evolution": false,
+    "memory_recall": false,
+    "memory_feedback": false,
+    "shared_memory_file": null,
+    "learning_task_ids": [],
+    "fail_fast": false,
+    "verbose": false
+  },
+  "task_ids": [
+    "file_exact_create",
+    "approval_delete_rejected",
+    "clarification_retention"
+  ],
+  "started_at": "2026-11-09T04:35:27.436232Z",
+  "finished_at": "2026-11-09T04:35:27.912905Z",
+  "status": "completed",
+  "run_count": 3,
+  "notes": ""
+}

@@ -1,0 +1,83 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "git_commit": "18ceabec488d7bf65e315cb59889a2216a9a464f",
+  "api_key_configured": false,
+  "live_api_allowed": false,
+  "created_at": "2026-11-09T04:35:25.657968Z",
+  "overall_status": "NOT_VERIFIED",
+  "stages": [
+    {
+      "stage": 1,
+      "stage_id": "connectivity",
+      "name": "Connectivity smoke test",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 2,
+      "stage_id": "structured_output",
+      "name": "Structured plan and action",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 3,
+      "stage_id": "tool_execution",
+      "name": "Real file and Docker tool execution",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 4,
+      "stage_id": "multi_agent",
+      "name": "Planning, delegation and independent review",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 5,
+      "stage_id": "hitl_memory",
+      "name": "Clarification, approval and memory reuse",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 6,
+      "stage_id": "live_benchmark",
+      "name": "Full live benchmark",
+      "status": "NOT_VERIFIED",
+      "detail": "no API key configured",
+      "metrics": {},
+      "started_at": "2026-11-09T04:35:25.657968Z",
+      "finished_at": null,
+      "output_dir": null
+    }
+  ],
+  "budget": {},
+  "memory_experiment": null,
+  "notes": [
+    "All stages NOT_VERIFIED: no API key configured. No paid API call was made.",
+    "Required configuration: AGENTFORGE_LLM_PROVIDER=deepseek|hkgai, the matching API key, and for HKGAI also BASE_URL and MODEL. Do not paste keys into chat or logs."
+  ]
+}

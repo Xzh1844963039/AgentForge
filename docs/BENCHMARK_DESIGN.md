@@ -197,8 +197,8 @@ Exports:
 **MOCK FIXTURE RESULT** warning. Fixture scores validate verifiers, tools, state
 transitions, budgets and metrics — not model capability.
 
-`benchmarks/live/tasks.jsonl` contains 8 tasks with fixture actions and fault
-behavior removed. `LiveAcceptanceRunner` invokes DeepSeek/HKGAI only when both
+`benchmarks/live/tasks.jsonl` contains 9 tasks with fixture actions and fault
+behavior removed. `memory_tasks.jsonl` adds a separate learning/evaluation pair. `LiveAcceptanceRunner` invokes DeepSeek/HKGAI only when both
 an API key exists and `--allow-live-api` is explicitly supplied. Otherwise it
 runs a three-task fixture harness validation and marks all live checks
 `NOT_VERIFIED`.

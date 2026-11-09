@@ -22,7 +22,7 @@ Delivered:
 - typed benchmark schema, dataset loader, isolated runtime factory, verifier
   engine, metrics collector, failure analyzer and report generator;
 - 34 internal development tasks across all 10 required categories;
-- 8 live-acceptance tasks with fixture behavior stripped;
+- 9 live-acceptance tasks with fixture behavior stripped (Phase 6A added a file task);
 - resumable batch execution with JSON/JSONL/CSV/Markdown exports and Git commit
   capture;
 - A/B/C ablation (single-agent, multi-agent, multi-agent + memory) with separate

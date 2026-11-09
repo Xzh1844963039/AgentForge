@@ -2,7 +2,7 @@
 
 **A memory-evolving multi-agent collaborative platform with autonomous task delegation, real tool execution, Docker sandbox isolation, durable human-in-the-loop control, and a reproducible benchmark/ablation harness.**
 
-AgentForge is the final project for the HKUST NLP/Agent course. It is built incrementally: Phase 1 delivered the multi-agent runtime, Phase 2 the validated tool framework and Docker sandbox, Phase 3 evidence-first memory evolution, Phase 4 persistent approvals/clarifications and workflow control, and Phase 5 a standardized benchmark, ablation, fault-injection and live-acceptance harness.
+AgentForge is the final project for the HKUST NLP/Agent course (current version **0.6.0**, Phase 6A pre-final). It is built incrementally: Phase 1 delivered the multi-agent runtime, Phase 2 the validated tool framework and Docker sandbox, Phase 3 evidence-first memory evolution, Phase 4 persistent approvals/clarifications and workflow control, and Phase 5 a standardized benchmark, ablation, fault-injection and live-acceptance harness.
 
 ## Current status
 
@@ -13,9 +13,20 @@ AgentForge is the final project for the HKUST NLP/Agent course. It is built incr
 | Phase 3 — Evidence-first memory evolution, procedural promotion, feedback, ablation | ✅ complete (pipeline verified; real-LLM learning NOT VERIFIED) |
 | Phase 4 — Human-in-the-loop, approvals, clarification, pause/resume/cancel, reassignment | ✅ complete (runtime verified; real-LLM HITL NOT VERIFIED) |
 | Phase 5 — Benchmark harness, 34-task dev set, ablation, reliability, performance | ✅ complete (fixture benchmark verified; live LLM NOT VERIFIED) |
-| Phase 6 — External integrations and real-provider hardening | ⏳ not started |
+| Phase 6A — Provider/structured-output hardening, staged live acceptance, final readiness | ✅ engineering complete; live stages NOT_VERIFIED (no key) |
+| Phase 6 — Final submission and authorized live execution | ⏳ awaiting credentials and official test set |
 
-**Verified on 2026-11-09:** `242 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed** (4 Phase 2 + 1 Phase 5 container-death test); Ruff F/E9 clean; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM HITL, memory learning and live acceptance are **NOT VERIFIED** (no API key; no paid call made).
+**Verified on 2026-11-09:** `257 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed** (4 Phase 2 + 1 Phase 5 container-death test); Ruff F/E9 clean; coverage **75%**; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM HITL, memory learning and live acceptance are **NOT VERIFIED** (no API key; no paid call made).
+
+Phase 6A highlights:
+
+- DeepSeek/HKGAI HTTP compatibility hardened: configurable endpoint/model, full-endpoint URLs, content-part responses, usage parsing, auth/rate-limit/timeout propagation and key redaction.
+- Structured action/plan repair is bounded and audited; plain text is not silently treated as task success.
+- New hard limits: per-task tokens, workflow LLM calls and repeated identical tool actions.
+- Six-stage live acceptance ladder with cumulative request/token budgets and explicit `--allow-live-api`; no key means all stages `NOT_VERIFIED`.
+- Live memory protocol separates learning tasks from evaluation and records retrieval/applied IDs and action changes.
+- Benchmark correctness audit fixed budget success accounting and added sample-size/token-source caveats.
+- New provider, repair, budget, staged-live and correctness tests; final evaluation protocol and submission checklist prepared.
 
 Phase 5 highlights:
 
@@ -191,7 +202,23 @@ Performance evidence:
 python benchmarks/performance/measure.py
 ```
 
-### 9. Run the tests
+### 9. Run Phase 6A live acceptance (requires authorization)
+
+```powershell
+# Connectivity only
+python -m agentforge benchmark live --provider deepseek --stage 1 --allow-live-api
+
+# Full stage ladder with hard budgets
+python -m agentforge benchmark live --provider deepseek --stage all --allow-live-api `
+  --max-requests 120 --max-tokens 250000
+```
+
+Stages: connectivity → structured output → real tools/Docker → multi-agent
+collaboration → HITL/memory → full live benchmark. A stage failure stops later
+stages. Without a key **and** `--allow-live-api`, no request is made and all
+stages are `NOT_VERIFIED`. The command never uses a ZCode/internal model.
+
+### 10. Run the tests
 
 ```powershell
 pytest -q
@@ -201,13 +228,13 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-242 passed, 2 skipped
+257 passed, 2 skipped
 ```
 
-The Phase 5 tests exercise 34 dataset tasks, objective verification, batch
-resume and exports, single-agent baseline, ablation, live no-key safety, and
-fault injection including the audit-write reconciliation window. Phase 4 tests
-remain active.
+The Phase 6A tests add provider request/response/retry/redaction tests, bounded
+structured-output repair, token/LLM/repeated-action limits, live stage no-key
+safety, live-budget enforcement, the live memory harness and benchmark
+correctness checks. Phase 4/5 tests remain active.
 
 Optional coverage:
 
@@ -245,6 +272,19 @@ AGENTFORGE_DEEPSEEK_MODEL=deepseek-chat
 `DEEPSEEK_API_KEY` is accepted as an alias. Selecting a real provider without credentials fails explicitly; it never silently falls back to mock.
 
 HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the course; live HKGAI validation is pending.
+
+### Robustness limits
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AGENTFORGE_STRUCTURED_OUTPUT_REPAIRS` | `1` | Bounded JSON action/plan repair attempts |
+| `AGENTFORGE_REQUIRE_STRUCTURED_ACTIONS` | `true` | Reject plain text in task mode |
+| `AGENTFORGE_MAX_TASK_TOKENS` | `120000` | Per-task token guard |
+| `AGENTFORGE_MAX_LLM_CALLS_PER_WORKFLOW` | `200` | Workflow-wide LLM-call guard |
+| `AGENTFORGE_MAX_REPEATED_TOOL_ACTIONS` | `3` | Stop repeated identical tool calls |
+
+Live acceptance additionally enforces `--max-requests` and `--max-tokens` across
+all stages. No paid call is made without a key and explicit `--allow-live-api`.
 
 ### Tools and sandbox
 
@@ -364,7 +404,7 @@ agentforge benchmark run               Run one/all tasks, resumable and exported
 agentforge benchmark compare           Run A/B/C ablation
 agentforge benchmark report            Regenerate Markdown report
 agentforge benchmark failures          Show classified failures
-agentforge benchmark live              Real-LLM acceptance (explicit opt-in)
+agentforge benchmark live [--stage N]   Staged real-LLM acceptance (explicit opt-in)
 ```
 
 Agent IDs: `coordinator`, `research`, `coding`, `reviewer`.
@@ -569,10 +609,10 @@ See [docs/BENCHMARK_DESIGN.md](docs/BENCHMARK_DESIGN.md),
 │   └── cli_benchmark.py benchmark CLI commands
 ├── benchmarks/
 │   ├── dev/             34 internal tasks + reproducible generator
-│   ├── live/            8 live-acceptance tasks + generator
+│   ├── live/            9 live-acceptance + 2 memory tasks, generators
 │   ├── performance/     before/after microbenchmarks
 │   └── runs/            compact batch records (workspaces/DBs ignored)
-├── tests/               244 collected: unit, integration, protocol, HITL, benchmark, CLI, Docker
+├── tests/               259 collected: unit, integration, protocol, HITL, benchmark, provider, CLI, Docker
 ├── examples/            mock/file-tool/memory/Phase-4 HITL demos, real-provider example
 ├── docs/                architecture, plan, Phase 1–5 reports, tools/sandbox/memory/HITL/benchmark
 ├── data/                runtime data (ignored): DB, JSONL, workspaces, artifacts
@@ -620,18 +660,23 @@ Implemented:
 - Structured tool evidence from the SQLite audit is propagated into synthesis, review and final report prompts.
 - Task-scoped memory retrieval and feedback (workflow/task/execution IDs).
 - 34-task objective benchmark, resumable runner, JSON/JSONL/CSV/Markdown exports.
-- A/B/C ablation, failure taxonomy, live-acceptance framework and 8 live tasks.
+- A/B/C ablation, failure taxonomy, staged live-acceptance framework and 9 live tasks.
+- Provider hardening: full-endpoint URLs, content-part responses, usage/auth/rate-limit/timeout handling, key redaction.
+- Bounded structured-output repair, per-task token limit, workflow LLM-call limit and repeated-action guard.
+- Staged live acceptance with cumulative request/token budgets and explicit authorization.
+- Live memory learning/evaluation protocol with retrieval/applied IDs.
 - High-risk execute-vs-audit reconciliation (`NEEDS_RECONCILIATION`), blocking blind replay.
 - Fault-injection coverage and measured SQLite/catalog optimizations.
-- SQLite + JSONL observability, expanded metrics, CLI/REPL, deterministic demos, 242 passing tests.
+- SQLite + JSONL observability, expanded metrics, CLI/REPL, deterministic demos, 257 passing tests.
 
 Not implemented / pending:
 
 - **Live search** — HTTP provider tested with `httpx.MockTransport`, no live endpoint configured.
 - **Real remote Git push** — only a temporary local bare remote was tested; approval prevents unapproved pushes.
-- **Real LLM tool-calling, HITL and benchmark acceptance** — no DeepSeek/HKGAI key; no paid call made. Live checks are `NOT_VERIFIED`.
-- **Real-LLM memory learning and live memory reuse** — NOT VERIFIED; fixture ablation validates plumbing only.
+- **Authorized live DeepSeek/HKGAI stages** — no API key or paid-call authorization; all live stages are `NOT_VERIFIED`.
+- **Real-LLM memory learning and live memory reuse** — NOT VERIFIED; the live memory protocol is implemented but not executed.
 - **Real-user HITL** — human benchmark scripts are explicitly simulated.
+- **Official course test set** — not received; final evaluation protocol is ready.
 - **Reconciliation resolution UI** — unresolved high-risk side effects require manual reconciliation; no resolution workflow yet.
 - **Web UI**, preemptive mid-tool interruption, bounded DAG concurrency, custom seccomp/AppArmor profiles, and cost-budget enforcement are future work.
 
@@ -655,7 +700,7 @@ docker ps -a
 # no AgentForge containers left
 ```
 
-The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 5 suite is `242 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Benchmark Python tasks additionally execute their generated code and independent verifier tests in Docker.
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 6A suite is `257 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Benchmark Python tasks additionally execute their generated code and independent verifier tests in Docker.
 
 The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 
@@ -698,6 +743,10 @@ The final report is grounded in the persisted `tool_calls` audit: stdout, stderr
 - [docs/PHASE3_REPORT.md](docs/PHASE3_REPORT.md)
 - [docs/PHASE4_REPORT.md](docs/PHASE4_REPORT.md)
 - [docs/PHASE5_REPORT.md](docs/PHASE5_REPORT.md)
+- [docs/REAL_LLM_ACCEPTANCE.md](docs/REAL_LLM_ACCEPTANCE.md)
+- [docs/PHASE6A_REPORT.md](docs/PHASE6A_REPORT.md)
+- [docs/FINAL_EVALUATION_PROTOCOL.md](docs/FINAL_EVALUATION_PROTOCOL.md)
+- [docs/FINAL_SUBMISSION_CHECKLIST.md](docs/FINAL_SUBMISSION_CHECKLIST.md)
 - [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)
 
 ## License

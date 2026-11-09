@@ -1,4 +1,4 @@
-# AgentForge Architecture (Phase 1–5)
+# AgentForge Architecture (Phase 1–6A)
 
 ## 1. Scope
 
@@ -6,7 +6,8 @@ Phase 1 provides the multi-agent runtime; Phase 2 adds real tool execution and D
 sandbox isolation; Phase 3 adds evidence-first memory evolution, retrieval and feedback;
 Phase 4 adds persistent approvals/clarifications and workflow lifecycle control; Phase 5
 adds a standardized benchmark, ablation, failure-analysis and live-acceptance harness
-plus high-risk reconciliation state.
+plus high-risk reconciliation state; Phase 6A hardens live-provider integration,
+structured-output repair and staged acceptance budgets.
 The critical path is complete:
 
 - humans can talk privately to agents and publish goals to a group,
@@ -89,7 +90,7 @@ abstractions. Only `runtime.py` wires concrete implementations together.
 | `llm/` | `BaseLLMProvider`; async DeepSeek and HKGAI clients over an OpenAI-compatible protocol; deterministic mock; factory. |
 | `persistence/` | Thread-safe SQLite repository (including approvals, clarifications, workflow events, reconciliation) and append-only JSONL event logger. |
 | `interaction/` | Persisted approval and clarification services plus the interaction repository. |
-| `benchmark/` | Benchmark schema/datasets, isolated runtime factory, objective verifiers, metrics, failure analyzer, runner, ablation and live acceptance. |
+| `benchmark/` | Benchmark schema/datasets, isolated runtime factory, objective verifiers, metrics, failure analyzer, runner, ablation, staged live acceptance and live memory protocol. |
 | `memory/` | Per-agent memory interface; evidence-first evolution, provenance/verification, embeddings, task-scoped retrieval, candidates, decay, feedback and controlled experiment. |
 | `messaging/` | Conversation lifecycle and durable message routing/broadcasting. |
 | `agents/` | `BaseAgent` (inbox, per-agent task-state mirror, memory/tool interfaces, suspension), four roles, profile defaults, registry, prompt/action protocol. |
@@ -606,6 +607,11 @@ Key properties:
   claim is made.
 - **Performance:** measured SQLite indexes and tool-catalog caching; Docker startup
   is reported as a dominant cost rather than hidden.
+- **Staged live acceptance (Phase 6A):** connectivity → structured output → real
+  tools → collaboration → HITL/memory → full benchmark, with cumulative request/token
+  budgets and no-key `NOT_VERIFIED` behavior.
+- **Structured repair:** task-mode plain text is rejected; malformed actions/plans get
+  bounded, audited repair calls; exhaustion fails explicitly.
 
 ## 19. Extension checklist
 
