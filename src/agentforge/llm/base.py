@@ -57,10 +57,12 @@ class LLMProviderError(RuntimeError):
         *,
         provider: str | None = None,
         status_code: int | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.provider = provider
         self.status_code = status_code
+        self.details = details or {}
 
 
 class ProviderConfigurationError(LLMProviderError):

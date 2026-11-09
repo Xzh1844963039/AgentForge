@@ -216,12 +216,12 @@ Final code state:
 
 | Check | Result |
 |---|---|
-| `pytest -q --cov=agentforge` | **257 passed, 2 skipped** |
+| `pytest -q --cov=agentforge` | **269 passed, 2 skipped** |
 | Docker tests | **5 passed** (including container-death recovery) |
 | Coverage | **75%** (9,657 statements, 2,458 missed) |
 | Ruff F/E9 | **All checks passed** |
 
-Phase 6A adds 15 tests: provider request/response/retry/redaction, full endpoint
+Phase 6A and the streaming follow-up add 27 tests: provider request/response/retry/redaction, SSE streaming, full endpoint
 URLs, content-part responses, structured repair success/exhaustion, plain-text
 rejection, token/workflow limits, live request/token budgets, staged-live no-key
 safety, live memory harness and benchmark correctness.

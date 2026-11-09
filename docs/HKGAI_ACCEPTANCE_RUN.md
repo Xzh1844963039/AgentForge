@@ -117,7 +117,7 @@ After changing Stage 1 `max_tokens` from 32 to 256 and adding `finish_reason` to
 the stage metrics:
 
 ```text
-Full suite: 257 passed, 2 skipped
+Full suite: 269 passed, 2 skipped
 Docker tests: 5 passed (included in full suite)
 Ruff F/E9: clean
 ```
@@ -132,5 +132,7 @@ confirm:
 3. whether streaming or a different approved route/model is required;
 4. whether the served model `...e10_meeting` is the intended target.
 
-No model/provider switch will be made without explicit authorization. No full
-Live Benchmark or Stage 3–6 run was started.
+No model/provider switch will be made without explicit authorization. Optional SSE
+streaming and a one-request probe are now prepared and offline-tested; see
+`docs/HKGAI_STREAMING_DIAGNOSIS.md`. The probe has not been executed. No full Live
+Benchmark or Stage 3–6 run was started.

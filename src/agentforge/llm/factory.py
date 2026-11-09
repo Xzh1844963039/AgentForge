@@ -78,6 +78,7 @@ def build_llm_provider(
             api_key=api_key,
             base_url=settings.hkgai_base_url,
             model=settings.hkgai_model,
+            stream=settings.hkgai_stream,
             **common,
         )
 

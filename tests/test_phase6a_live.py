@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from agentforge.agents.base import BaseAgent
+from agentforge.benchmark.hkgai_probe import run_hkgai_probe
 from agentforge.benchmark.live_memory import LiveMemoryExperimentRunner
 from agentforge.benchmark.live_stages import LiveStageRunner
 from agentforge.benchmark.metrics import aggregate_runs
@@ -394,3 +395,37 @@ async def test_provider_error_redacts_api_key():
     assert "sk-secret-value" not in str(raised.value)
     assert "[REDACTED]" in str(raised.value)
     await provider.aclose()
+
+
+async def test_hkgai_probe_requires_explicit_authorization(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        llm_provider="hkgai",
+        hkgai_api_key="dummy-not-real",
+        hkgai_base_url="https://example.invalid/v1",
+        hkgai_model="dummy-model",
+        data_dir=tmp_path / "data",
+    )
+    with pytest.raises(PermissionError, match="allow-live-api"):
+        await run_hkgai_probe(
+            settings,
+            allow_live_api=False,
+            output_dir=str(tmp_path / "probe"),
+        )
+
+
+def test_hkgai_stream_flag_reaches_provider_without_network():
+    settings = Settings(
+        _env_file=None,
+        llm_provider="hkgai",
+        hkgai_api_key="dummy-not-real",
+        hkgai_base_url="https://example.invalid/v1",
+        hkgai_model="dummy-model",
+        hkgai_stream=True,
+    )
+    provider = build_llm_provider(settings)
+    assert provider.stream is True
+    default = build_llm_provider(
+        settings.model_copy(update={"hkgai_stream": False})
+    )
+    assert default.stream is False

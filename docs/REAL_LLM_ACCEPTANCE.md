@@ -141,6 +141,9 @@ If no promoted memory or no retrieval occurs, the experiment is reported
 - Stage 2 structured output: **FAILED** — HKGAI disconnected the connection after
   ~65–67s on the real Coordinator planning prompt
   (`RemoteProtocolError: Server disconnected without sending a response`).
+- Optional SSE streaming is implemented (`AGENTFORGE_HKGAI_STREAM` / provider
+  `stream=True`) with 10 offline parsing tests. The one-request streaming probe is
+  prepared but not executed; it awaits a new explicit authorization.
 - Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
 - Actual requests: 5 in Stage 1 work (including diagnostics), 4 in Stage 2 work;
   total 9. Tokens: 376 in Stage 1 work; 0 returned in Stage 2 work.
@@ -158,7 +161,9 @@ Required next action:
 2. Do not use a different model/provider without explicit authorization.
 3. After Stage 2 passes, continue Stage 3 → 4 → 5 → 6 with fresh request/token
    budgets.
-4. Real-user HITL and official test-set evaluation remain pending.
+4. After the gateway issue is resolved, run the prepared `benchmark hkgai-probe`
+   before retrying Stage 2.
+5. Real-user HITL and official test-set evaluation remain pending.
 
 ## 7. Output and audit
 

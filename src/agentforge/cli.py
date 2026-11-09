@@ -333,6 +333,16 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_live.add_argument("--max-tokens", type=int, default=250_000)
     benchmark_live.add_argument("--skip-memory", action="store_true")
 
+    benchmark_probe = benchmark_sub.add_parser(
+        "hkgai-probe",
+        help="single-request streaming probe for the failed HKGAI planning prompt",
+    )
+    _add_common_options(benchmark_probe, suppress_defaults=True)
+    benchmark_probe.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_probe.add_argument("--allow-live-api", action="store_true")
+    benchmark_probe.add_argument("--max-tokens", type=int, default=256)
+    benchmark_probe.add_argument("--timeout", type=float, default=120.0)
+
     return parser
 
 

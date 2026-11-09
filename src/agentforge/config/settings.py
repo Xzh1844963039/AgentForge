@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     )
     hkgai_base_url: str | None = None
     hkgai_model: str | None = None
+    hkgai_stream: bool = False
 
     # --- LLM behaviour ----------------------------------------------------------
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)

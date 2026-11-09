@@ -21,6 +21,7 @@ class DeepSeekProvider(OpenAICompatibleProvider):
         timeout: float = 60.0,
         max_retries: int = 3,
         client: httpx.AsyncClient | None = None,
+        stream: bool = False,
     ) -> None:
         super().__init__(
             name="deepseek",
@@ -32,4 +33,5 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             timeout=timeout,
             max_retries=max_retries,
             client=client,
+            stream=stream,
         )

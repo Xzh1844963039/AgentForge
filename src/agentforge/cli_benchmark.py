@@ -86,7 +86,14 @@ async def run_benchmark_command(
         return _failures(args, console)
     if command == "live":
         return await _live(args, settings_factory, console)
-    console.print(Text("usage: agentforge benchmark <list|run|compare|report|failures|live>"))
+    if command == "hkgai-probe":
+        return await _hkgai_probe(args, settings_factory, console)
+    console.print(
+        Text(
+            "usage: agentforge benchmark "
+            "<list|run|compare|report|failures|live|hkgai-probe>"
+        )
+    )
     return 2
 
 
@@ -312,3 +319,48 @@ async def _live(args: argparse.Namespace, settings_factory, console: Console) ->
             )
         )
     return 0
+
+
+async def _hkgai_probe(args: argparse.Namespace, settings_factory, console: Console) -> int:
+    from agentforge.benchmark.hkgai_probe import run_hkgai_probe
+
+    if not args.allow_live_api:
+        console.print(
+            Text(
+                "Refusing the real HKGAI probe: pass --allow-live-api explicitly.",
+                style="bold yellow",
+            )
+        )
+        return 2
+    settings = settings_factory(args)
+    try:
+        result = await run_hkgai_probe(
+            settings,
+            allow_live_api=True,
+            max_tokens=args.max_tokens,
+            timeout=args.timeout,
+            output_dir=args.output_dir,
+        )
+    except PermissionError as exc:
+        console.print(Text(str(exc), style="red"))
+        return 2
+    table = Table(title="HKGAI streaming probe")
+    table.add_column("Metric")
+    table.add_column("Value")
+    table.add_row("Configured model", result.configured_model)
+    table.add_row("Response model", result.response_model or "n/a")
+    table.add_row("HTTP status", str(result.http_status))
+    table.add_row("First byte / event / content ms", f"{result.first_byte_ms} / {result.first_event_ms} / {result.first_content_ms}")
+    table.add_row("SSE events / chunks", f"{result.stream_events} / {result.chunks}")
+    table.add_row("Content / reasoning chars", f"{result.content_chars} / {result.reasoning_chars}")
+    table.add_row("finish_reason", str(result.finish_reason))
+    table.add_row("Terminal / missing", f"{result.terminal_event} / {result.terminal_event_missing}")
+    table.add_row("Usage reported", str(result.usage_reported))
+    table.add_row("Tokens", f"{result.prompt_tokens}+{result.completion_tokens}={result.total_tokens}")
+    table.add_row("Elapsed", f"{result.elapsed_seconds}s")
+    table.add_row("Complete", str(result.complete))
+    table.add_row("Error", result.error_type or "none")
+    console.print(table)
+    console.print(Text(f"Budget: {result.budget}"))
+    console.print(Text(f"Report: {Path(args.output_dir) / ('hkgai_probe_*') / 'PROBE_REPORT.md'}"))
+    return 0 if result.complete else 1
