@@ -142,11 +142,13 @@ If no promoted memory or no retrieval occurs, the experiment is reported
   ~65–67s on the real Coordinator planning prompt
   (`RemoteProtocolError: Server disconnected without sending a response`).
 - Optional SSE streaming is implemented (`AGENTFORGE_HKGAI_STREAM` / provider
-  `stream=True`) with 10 offline parsing tests. The one-request streaming probe is
-  prepared but not executed; it awaits a new explicit authorization.
+  `stream=True`) with 10 offline parsing tests.
+- Authorized one-request streaming probe: **FAILED after 67.437s**; the server
+  sent no HTTP response headers, no SSE bytes, no usage and no model. This is an
+  upstream/gateway pre-response disconnect, not an SSE parsing issue.
 - Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
-- Actual requests: 5 in Stage 1 work (including diagnostics), 4 in Stage 2 work;
-  total 9. Tokens: 376 in Stage 1 work; 0 returned in Stage 2 work.
+- Actual requests: 5 in Stage 1 work, 4 in Stage 2 work, 1 streaming probe;
+  total 10. Tokens: 376 in Stage 1 work; 0 returned in Stage 2/probe work.
 - Paid calls were limited to the authorized HKGAI endpoint; no other provider was
   used.
 - API key scan: not present in tracked files, stage JSON/Markdown, runtime logs or

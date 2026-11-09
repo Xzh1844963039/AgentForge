@@ -133,6 +133,7 @@ confirm:
 4. whether the served model `...e10_meeting` is the intended target.
 
 No model/provider switch will be made without explicit authorization. Optional SSE
-streaming and a one-request probe are now prepared and offline-tested; see
-`docs/HKGAI_STREAMING_DIAGNOSIS.md`. The probe has not been executed. No full Live
-Benchmark or Stage 3–6 run was started.
+streaming and a one-request probe were prepared and offline-tested. The authorized
+probe was then executed once: it received no HTTP response headers or bytes and the
+server disconnected after 67.437s. See `docs/HKGAI_STREAMING_DIAGNOSIS.md`. No full
+Live Benchmark or Stage 3–6 run was started.

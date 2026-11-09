@@ -168,10 +168,41 @@ Recorded fields:
 Output: `benchmarks/runs/hkgai_probe_<timestamp>/probe.json` and
 `PROBE_REPORT.md`.
 
-No real probe has been executed. It requires a new explicit authorization because
-it is an additional paid request beyond the Stage 1/2 budgets already consumed.
+## 9. Executed probe result (2026-11-09 19:26)
 
-## 9. Questions for the course/HKGAI provider
+The authorized single probe was executed with exactly the prepared parameters.
+
+| Metric | Result |
+|---|---:|
+| HTTP requests | 1 |
+| Provider retries | 0 |
+| `stream` | true |
+| `max_tokens` | 256 |
+| client timeout | 120s |
+| HTTP status | **none received** |
+| first byte / first event / first content | none / none / none |
+| SSE events / content chunks | 0 / 0 |
+| content / reasoning chars | 0 / 0 |
+| finish_reason | none |
+| usage | not returned |
+| total elapsed | **67.437s** |
+| error | `LLMProviderError: RemoteProtocolError: Server disconnected without sending a response` |
+| budget | requests 1/1, tokens 0/10,000 |
+
+Interpretation:
+
+- Streaming did not help because **the server sent no HTTP response headers or
+  bytes at all**. This is not an SSE parsing failure and not a client timeout:
+  the request was disconnected upstream after ~67s.
+- The probe result makes the gateway/upstream pre-response timeout the leading
+  explanation.
+- No model alias could be observed in this probe because no response was
+  returned.
+- No tools, side effects, retries, model switch or Stage 3–6 were performed.
+- Report: `benchmarks/runs/hkgai_probe_20261109_192627/probe.json` and
+  `PROBE_REPORT.md`. Key scan over the report: 0 occurrences.
+
+## 10. Questions for the course/HKGAI provider
 
 1. Does `t2_hkgai-v3_fp8_1m_e7` intentionally route to
    `t2_hkgai-v3_fp8_1m_e10_meeting`?
