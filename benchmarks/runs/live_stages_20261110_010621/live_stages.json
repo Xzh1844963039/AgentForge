@@ -1,0 +1,83 @@
+{
+  "provider": "hkgai",
+  "model": "t2_hkgai-v3_fp8_1m_e7",
+  "git_commit": "bb41624e3802d3f165735056aba8a985c6196291",
+  "api_key_configured": true,
+  "live_api_allowed": false,
+  "created_at": "2026-11-09T17:06:21.663641Z",
+  "overall_status": "NOT_VERIFIED",
+  "stages": [
+    {
+      "stage": 1,
+      "stage_id": "connectivity",
+      "name": "Connectivity smoke test",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 2,
+      "stage_id": "structured_output",
+      "name": "Structured plan and action",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 3,
+      "stage_id": "tool_execution",
+      "name": "Real file and Docker tool execution",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 4,
+      "stage_id": "multi_agent",
+      "name": "Planning, delegation and independent review",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 5,
+      "stage_id": "hitl_memory",
+      "name": "Clarification, approval and memory reuse",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    },
+    {
+      "stage": 6,
+      "stage_id": "live_benchmark",
+      "name": "Full live benchmark",
+      "status": "NOT_VERIFIED",
+      "detail": "live API calls were not explicitly authorized",
+      "metrics": {},
+      "started_at": "2026-11-09T17:06:21.663641Z",
+      "finished_at": null,
+      "output_dir": null
+    }
+  ],
+  "budget": {},
+  "memory_experiment": null,
+  "notes": [
+    "All stages NOT_VERIFIED: live API calls were not explicitly authorized. No paid API call was made.",
+    "Required configuration: AGENTFORGE_LLM_PROVIDER=deepseek|hkgai, the matching API key, and for HKGAI also BASE_URL and MODEL. Do not paste keys into chat or logs."
+  ]
+}

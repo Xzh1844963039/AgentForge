@@ -1,0 +1,126 @@
+{
+  "status": "FAILED",
+  "mode": "LIVE",
+  "configured_model": "t2_hkgai-v3_fp8_1m_e7",
+  "workflow_id": "wf_e3a0a77e69ad4b458237a3133ca2d9e4",
+  "workflow_status": "failed",
+  "goal": "In the sandbox, run Python that prints \"STAGE2_SUM=5\"; then report the recorded stdout and exit code.",
+  "checks": {
+    "A_real_hkgai_compact_prompts": {
+      "passed": true,
+      "detail": "provider=hkgai, provider_class_ok=True, models=['t2_hkgai-v3_fp8_1m_e10_meeting'], planner=compact, agent=compact, plan_compact_prompt=True, worker_calls=1, policy_calls=0"
+    },
+    "B_plan_validated": {
+      "passed": true,
+      "detail": "plan_subtasks=1, plan_attempts=1, plan_errors=0"
+    },
+    "C_capability_dispatch": {
+      "passed": true,
+      "detail": "assigned=['coding']"
+    },
+    "D_agent_structured_action": {
+      "passed": false,
+      "detail": "executing_agent_calls=0, completed_plan_tasks=0"
+    },
+    "E_action_schema_permission_validation": {
+      "passed": false,
+      "detail": "successful_tool_calls=0/0"
+    },
+    "F_sandbox_tool_execution": {
+      "passed": false,
+      "detail": "no successful python_execute record"
+    },
+    "G_tool_evidence_in_final_report": {
+      "passed": false,
+      "detail": "evidence_in_prompt=False, marker_in_final_report=False, final_chars=0"
+    }
+  },
+  "plan_subtasks": 1,
+  "plan_attempts": 1,
+  "plan_summary": "Run Python in the sandbox to print STAGE2_SUM=5, then report the captured stdout and exit code.",
+  "max_plan_subtasks": 1,
+  "review_enabled": false,
+  "assignments": [
+    {
+      "task_id": "task_d961973dfd0e43b290497120f7d4be17",
+      "plan_key": "k1",
+      "kind": "coding",
+      "required_capabilities": [
+        "coding",
+        "python",
+        "testing"
+      ],
+      "assigned_agent": "coding",
+      "assignment_score": 1.0,
+      "matched_capabilities": [
+        "coding",
+        "python",
+        "testing"
+      ],
+      "status": "failed"
+    }
+  ],
+  "tool_calls": [],
+  "final_result_excerpt": "",
+  "calls": [
+    {
+      "index": 1,
+      "purpose": "plan",
+      "started_at": "2026-11-09T17:03:02.947616Z",
+      "prompt_chars": 913,
+      "requested_max_tokens": 1024,
+      "prompt_tokens": 311,
+      "completion_tokens": 303,
+      "total_tokens": 614,
+      "elapsed_seconds": 5.735,
+      "model": "t2_hkgai-v3_fp8_1m_e10_meeting",
+      "finish_reason": "stop",
+      "http_status": 200,
+      "content_preview": "{\"goal_summary\":\"Run Python in the sandbox to print STAGE2_SUM=5, then report the captured stdout and exit code.\",\"subtasks\":[{\"key\":\"k1\",\"description\":\"Execute Python in the sandbox that prints STAGE2_SUM=5, capture the recorded stdout and exit code, and report both results.\",\"required_capabilities",
+      "compact_planner_prompt": true,
+      "compact_action_prompt": false,
+      "compact_policy_prompt": false,
+      "tool_evidence_in_prompt": false,
+      "marker_in_prompt": true,
+      "status": "success",
+      "error_type": null,
+      "error_detail": null
+    },
+    {
+      "index": 2,
+      "purpose": "execute:coding:coding",
+      "started_at": "2026-11-09T17:04:08.705781Z",
+      "prompt_chars": 1392,
+      "requested_max_tokens": 1024,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "elapsed_seconds": 60.516,
+      "model": null,
+      "finish_reason": null,
+      "http_status": null,
+      "content_preview": "",
+      "compact_planner_prompt": false,
+      "compact_action_prompt": true,
+      "compact_policy_prompt": false,
+      "tool_evidence_in_prompt": false,
+      "marker_in_prompt": true,
+      "status": "failed",
+      "error_type": "LLMProviderError",
+      "error_detail": "hkgai transport error after 60519 ms: RemoteProtocolError: Server disconnected without sending a response."
+    }
+  ],
+  "total_requests": 2,
+  "total_tokens": 614,
+  "elapsed_seconds": 126.359,
+  "hard_stopped": true,
+  "hard_stop_reason": "LLMProviderError after 60.516s: hkgai transport error after 60519 ms: RemoteProtocolError: Server disconnected without sending a response.",
+  "budget_exhausted": false,
+  "budget_max_requests": 4,
+  "budget_max_tokens": 16500,
+  "inter_request_delay": 60.0,
+  "error_type": null,
+  "error_detail": null,
+  "output_dir": "benchmarks\\runs\\hkgai_stage2_20261110_010302",
+  "checked_at": "2026-11-09T17:05:09.231776Z"
+}

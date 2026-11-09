@@ -11,6 +11,13 @@ planning was blocked by a server-side disconnect; see
 passed with a smaller 889-char prompt (HTTP 200, 13.5s, valid one-subtask plan),
 which makes compact mode the recommended HKGAI planning configuration but does
 **not** mark full Stage 2 complete. See `docs/HKGAI_COMPACT_PLANNER.md`.
+
+The compact planner and a minimized agent action prompt are now wired into the
+real runtime, and a bounded real Stage 2 run on 2026-11-10 verified live A/B/C
+(real provider, valid plan, capability dispatch) while D–G stayed blocked: every
+follow-up request in a session was cut by the gateway at ~56–64s with no
+response, independent of prompt size (1.3k–5.2k chars). Stage 2 is therefore
+**PARTIALLY_VERIFIED**, not passed. See `docs/HKGAI_STAGE2_REAL_RUN.md`.
 Stages 3–6, real-LLM HITL and memory reuse remain NOT_VERIFIED.
 
 ---
@@ -220,12 +227,12 @@ Final code state:
 
 | Check | Result |
 |---|---|
-| `pytest -q` | **284 passed, 2 skipped** |
+| `pytest -q` | **300 passed, 2 skipped** |
 | Docker tests | **5 passed** (including container-death recovery) |
-| Coverage | **73%** (10,326 statements, 2,782 missed) |
+| Coverage | **73%** (10,768 statements, 2,866 missed) |
 | Ruff F/E9 | **All checks passed** |
 
-Phase 6A and the streaming/compact follow-ups add 37 tests: provider
+Phase 6A and the streaming/compact follow-ups add 53 tests: provider
 request/response/retry/redaction, SSE streaming, full endpoint URLs,
 content-part responses, structured repair success/exhaustion, plain-text
 rejection, token/workflow limits, live request/token budgets, staged-live no-key

@@ -1,0 +1,84 @@
+{
+  "status": "FAILED",
+  "mode": "LIVE",
+  "configured_model": "t2_hkgai-v3_fp8_1m_e7",
+  "workflow_id": "wf_051e4bbb09194260946d49faf4ba3a7a",
+  "workflow_status": "failed",
+  "goal": "In the sandbox, run Python that prints \"STAGE2_SUM=5\"; then report the recorded stdout and exit code.",
+  "checks": {
+    "A_real_hkgai_compact_prompts": {
+      "passed": false,
+      "detail": "provider=hkgai, provider_class_ok=True, models=[], planner=compact, agent=compact, plan_compact_prompt=True, worker_calls=0, policy_calls=0"
+    },
+    "B_plan_validated": {
+      "passed": false,
+      "detail": "plan_subtasks=0, plan_attempts=0, plan_errors=0"
+    },
+    "C_capability_dispatch": {
+      "passed": false,
+      "detail": "assigned=[]"
+    },
+    "D_agent_structured_action": {
+      "passed": false,
+      "detail": "executing_agent_calls=0, completed_plan_tasks=0"
+    },
+    "E_action_schema_permission_validation": {
+      "passed": false,
+      "detail": "successful_tool_calls=0/0"
+    },
+    "F_sandbox_tool_execution": {
+      "passed": false,
+      "detail": "no successful python_execute record"
+    },
+    "G_tool_evidence_in_final_report": {
+      "passed": false,
+      "detail": "evidence_in_prompt=False, marker_in_final_report=False, final_chars=0"
+    }
+  },
+  "plan_subtasks": 0,
+  "plan_attempts": 0,
+  "plan_summary": null,
+  "max_plan_subtasks": 1,
+  "review_enabled": false,
+  "assignments": [],
+  "tool_calls": [],
+  "final_result_excerpt": "",
+  "calls": [
+    {
+      "index": 1,
+      "purpose": "plan",
+      "started_at": "2026-11-09T17:01:36.574429Z",
+      "prompt_chars": 913,
+      "requested_max_tokens": 1024,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "elapsed_seconds": 63.985,
+      "model": null,
+      "finish_reason": null,
+      "http_status": null,
+      "content_preview": "",
+      "compact_planner_prompt": true,
+      "compact_action_prompt": false,
+      "compact_policy_prompt": false,
+      "tool_evidence_in_prompt": false,
+      "marker_in_prompt": true,
+      "status": "failed",
+      "error_type": "LLMProviderError",
+      "error_detail": "hkgai transport error after 63984 ms: RemoteProtocolError: Server disconnected without sending a response."
+    }
+  ],
+  "total_requests": 1,
+  "total_tokens": 0,
+  "elapsed_seconds": 64.062,
+  "hard_stopped": true,
+  "hard_stop_reason": "LLMProviderError after 63.985s: hkgai transport error after 63984 ms: RemoteProtocolError: Server disconnected without sending a response.",
+  "budget_exhausted": false,
+  "budget_max_requests": 5,
+  "budget_max_tokens": 16500,
+  "inter_request_delay": 60.0,
+  "error_type": null,
+  "error_detail": null,
+  "output_dir": "benchmarks\\runs\\hkgai_stage2_20261110_010136",
+  "checked_at": "2026-11-09T17:02:40.572909Z"
+}

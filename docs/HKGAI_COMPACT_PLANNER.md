@@ -134,3 +134,28 @@ available for other providers and for comparison. Before declaring Stage 2
 complete, run the full staged acceptance with fresh authorization and include at
 least one multi-subtask goal so the DAG and capability-coverage path is exercised
 live. The gateway's behavior on full/long prompts still needs a provider answer.
+
+## 7. Runtime integration and Stage 2 outcome (2026-11-10)
+
+The compact planner is now wired into the real runtime, not only the probe:
+
+- `runtime.py` resolves `AGENTFORGE_PLANNER_PROTOCOL=auto` → compact for HKGAI
+  and full for other providers; the same resolution applies to the benchmark
+  single-agent path. There is no second Coordinator entry point with a hardcoded
+  protocol; the diagnostic probe modules still import the full
+  `PLANNER_PROTOCOL` deliberately, and are not part of the runtime.
+- `AGENTFORGE_AGENT_PROTOCOL=auto` adds a minimal HKGAI action prompt: ~1,110-char
+  system prompt (one-line tool catalog + compact action protocol), a bounded
+  tool ledger instead of a growing conversation, and a 214-char no-tools prompt
+  for synthesis/review/finalize. The full action protocol and full tool schemas
+  remain the default for other providers.
+- Truncated (`finish_reason=length`) replies are never echoed into a repair
+  request; repairs re-ask from the original prompt.
+
+Result of the bounded real Stage 2 run (10/12 requests, 4,057/20,000 tokens):
+live A/B/C passed (real provider, valid plan, capability dispatch to `coding`);
+D–G did not run because every follow-up request in a session was cut by the
+gateway at ~56–64s with no response. Planning itself succeeded 4 of 6 times
+(913-char prompt, HTTP 200, ~6–8s), so the remaining blocker is the gateway's
+handling of the second and later requests, not the compact planner. Full details:
+`docs/HKGAI_STAGE2_REAL_RUN.md`.

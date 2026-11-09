@@ -103,6 +103,13 @@ protocol is configurable (`AGENTFORGE_PLANNER_PROTOCOL=auto|full|compact`) and
 recommended for HKGAI; the full protocol remains available. Full evidence:
 `docs/HKGAI_COMPACT_PLANNER.md`.
 
+A later bounded real-runtime Stage 2 attempt (2026-11-10) wired the compact
+planner and a minimized agent prompt into the runtime and verified live A/B/C
+(real provider, valid plan, capability dispatch). D–G remained blocked because
+every follow-up request in a session was cut by the gateway at ~56–64s with no
+response, regardless of prompt size. Stage 2 is **PARTIALLY_VERIFIED**.
+See `docs/HKGAI_STAGE2_REAL_RUN.md`.
+
 ## 4. Observed provider/model behavior
 
 - A simple Stage 1 prompt succeeds reliably and quickly with the configured model

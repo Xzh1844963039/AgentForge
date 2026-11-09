@@ -157,14 +157,37 @@ If no promoted memory or no retrieval occurs, the experiment is reported
   `t2_hkgai-v3_fp8_1m_e10_meeting`. This does **not** change the Stage 2 verdict:
   the full-protocol Stage 2 requests still failed, and multi-task live planning,
   repair and Stages 3–6 remain unverified. See `docs/HKGAI_COMPACT_PLANNER.md`.
-- Planner configuration: `AGENTFORGE_PLANNER_PROTOCOL=auto` (default) selects
-  compact for HKGAI and full for DeepSeek/mock; `full` and `compact` are explicit
-  overrides. Compact is recommended for HKGAI, while the full protocol remains
-  available and is still the reference path.
+- Planner/agent configuration: `AGENTFORGE_PLANNER_PROTOCOL=auto` and
+  `AGENTFORGE_AGENT_PROTOCOL=auto` (defaults) select compact/minimal for HKGAI
+  and full for DeepSeek/mock; `full` and `compact` are explicit overrides.
+  Compact is recommended for HKGAI, while the full protocol remains available
+  and is still the reference path.
 - Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
-- Actual requests: 5 in Stage 1 work, 4 in Stage 2 work, 1 streaming probe,
-  1 A + 1 B control, 1 Compact Planner; total 13. Tokens: 1,206 (376 Stage 1 +
-  186 A + 644 Compact Planner); 0 returned in Stage 2/probe/B work.
+- Actual requests in the 2026-11-09 budget: 5 in Stage 1 work, 4 in Stage 2 work,
+  1 streaming probe, 1 A + 1 B control, 1 Compact Planner; total 13. Tokens:
+  1,206 (376 Stage 1 + 186 A + 644 Compact Planner); 0 returned in
+  Stage 2/probe/B work.
+
+### 6.1 Real-runtime Stage 2 attempt (2026-11-10)
+
+A bounded runner (`benchmark hkgai-stage2`) drove the real runtime with the
+compact planner and minimized agent prompts. Budget for this instruction: 10 of
+12 requests, 4,057 of 20,000 returned tokens, `retries=0`, no model switch.
+
+- **A PASSED live** — real `HKGAIProvider`; runtime selected both compact
+  planner and minimal agent prompts (recorded per call).
+- **B PASSED live** — Coordinator returned a valid plan; `ExecutionPlan` +
+  `validate_plan` accepted it (4 of 6 runs).
+- **C PASSED live** — capability dispatcher assigned the `coding` task with
+  score 1.0.
+- **D–G NOT VERIFIED** — every follow-up request in a session (repair or agent
+  action, prompt sizes 1,283–5,179 chars) was cut by the gateway at 55.5–60.5s
+  with no HTTP status, headers, bytes or usage. First requests returned 4/6;
+  second requests returned 0/4. Prompt size was not the discriminator.
+- Offline equivalents for D–G pass with the mock provider and the real
+  dispatcher/Docker/audit (`demo-tools`), but they are not real-LLM evidence.
+
+Full evidence and provider questions: `docs/HKGAI_STAGE2_REAL_RUN.md`.
 - Paid calls were limited to the authorized HKGAI endpoint; no other provider was
   used.
 - API key scan: not present in tracked files, stage JSON/Markdown, runtime logs or
@@ -172,11 +195,12 @@ If no promoted memory or no retrieval occurs, the experiment is reported
 
 Required next action:
 
-1. Resolve the HKGAI gateway disconnect on the full/long structured-planning
-   prompts with the course provider (supported model/route, gateway timeout or
-   streaming policy). The compact probe passing at 889 chars suggests prompt
-   size/latency is a factor, but it does not explain or excuse the full Stage 2
-   failure; the existing 60–90s client timeout is not the limiting factor.
+1. Ask the HKGAI provider about the ~56–64s pre-response cut on the **second and
+   later requests of a session**. The 2026-11-10 runtime run shows first requests
+   returning (4/6) while every follow-up request failed (0/4) at 1.3k–5.2k chars,
+   so prompt size is not the discriminator; the client timeout is not the
+   limiting factor. Ask for the supported multi-turn agent-loop mode (SSE,
+   connection-per-request, dedicated route, or per-key concurrency rules).
 2. Do not use a different model/provider without explicit authorization. For
    HKGAI planning, `planner_protocol=auto`/`compact` is the recommended mode;
    keep the full protocol available for comparison and other providers.
