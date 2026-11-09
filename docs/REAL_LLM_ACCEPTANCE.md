@@ -151,10 +151,20 @@ If no promoted memory or no retrieval occurs, the experiment is reported
   no HTTP headers, no bytes, no usage, disconnect after 58.375s. Its prompt is
   2,290 chars vs the previous failed Stage 2 prompt at 2,298 chars, so B did not
   materially reduce prompt size.
+- Compact Planner one-request probe (889-char prompt): **PASSED** — HTTP 200,
+  13.5s, 300+344 = 644 tokens, `finish_reason=stop`, valid one-subtask
+  `ExecutionPlan` with valid capability coverage. Response model
+  `t2_hkgai-v3_fp8_1m_e10_meeting`. This does **not** change the Stage 2 verdict:
+  the full-protocol Stage 2 requests still failed, and multi-task live planning,
+  repair and Stages 3–6 remain unverified. See `docs/HKGAI_COMPACT_PLANNER.md`.
+- Planner configuration: `AGENTFORGE_PLANNER_PROTOCOL=auto` (default) selects
+  compact for HKGAI and full for DeepSeek/mock; `full` and `compact` are explicit
+  overrides. Compact is recommended for HKGAI, while the full protocol remains
+  available and is still the reference path.
 - Stages 3–6: **NOT RUN** (Stage 2 did not pass; budget gate respected).
 - Actual requests: 5 in Stage 1 work, 4 in Stage 2 work, 1 streaming probe,
-  1 A + 1 B control; total 12. Tokens: 562 (376 Stage 1 + 186 A); 0 returned in
-  Stage 2/probe/B work.
+  1 A + 1 B control, 1 Compact Planner; total 13. Tokens: 1,206 (376 Stage 1 +
+  186 A + 644 Compact Planner); 0 returned in Stage 2/probe/B work.
 - Paid calls were limited to the authorized HKGAI endpoint; no other provider was
   used.
 - API key scan: not present in tracked files, stage JSON/Markdown, runtime logs or
@@ -162,13 +172,16 @@ If no promoted memory or no retrieval occurs, the experiment is reported
 
 Required next action:
 
-1. Resolve the HKGAI gateway disconnect on structured planning requests with the
-   course provider (supported model/route, gateway timeout or streaming policy).
-   The existing 60–90s client timeout is not the limiting factor; the server
-   closes the connection.
-2. Do not use a different model/provider without explicit authorization.
-3. After Stage 2 passes, continue Stage 3 → 4 → 5 → 6 with fresh request/token
-   budgets.
+1. Resolve the HKGAI gateway disconnect on the full/long structured-planning
+   prompts with the course provider (supported model/route, gateway timeout or
+   streaming policy). The compact probe passing at 889 chars suggests prompt
+   size/latency is a factor, but it does not explain or excuse the full Stage 2
+   failure; the existing 60–90s client timeout is not the limiting factor.
+2. Do not use a different model/provider without explicit authorization. For
+   HKGAI planning, `planner_protocol=auto`/`compact` is the recommended mode;
+   keep the full protocol available for comparison and other providers.
+3. After full Stage 2 passes, continue Stage 3 → 4 → 5 → 6 with fresh
+   request/token budgets.
 4. After the gateway issue is resolved, run the prepared `benchmark hkgai-probe`
    before retrying Stage 2.
 5. Real-user HITL and official test-set evaluation remain pending.

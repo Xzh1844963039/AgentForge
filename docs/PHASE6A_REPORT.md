@@ -5,8 +5,12 @@
 **Environment:** Windows 11 (10.0.26200), Python 3.12.10, Docker Desktop 29.9.2
 **Version:** 0.6.0
 **Status:** Engineering complete for offline validation. A later authorized
-HKGAI run (2026-11-09) passed Stage 1 connectivity but Stage 2 structured planning
-was blocked by a server-side disconnect; see `docs/HKGAI_ACCEPTANCE_RUN.md`.
+HKGAI run (2026-11-09) passed Stage 1 connectivity, but full Stage 2 structured
+planning was blocked by a server-side disconnect; see
+`docs/HKGAI_ACCEPTANCE_RUN.md`. A single-request Compact Planner probe then
+passed with a smaller 889-char prompt (HTTP 200, 13.5s, valid one-subtask plan),
+which makes compact mode the recommended HKGAI planning configuration but does
+**not** mark full Stage 2 complete. See `docs/HKGAI_COMPACT_PLANNER.md`.
 Stages 3–6, real-LLM HITL and memory reuse remain NOT_VERIFIED.
 
 ---
@@ -216,15 +220,18 @@ Final code state:
 
 | Check | Result |
 |---|---|
-| `pytest -q --cov=agentforge` | **274 passed, 2 skipped** |
+| `pytest -q` | **284 passed, 2 skipped** |
 | Docker tests | **5 passed** (including container-death recovery) |
-| Coverage | **73%** (10,164 statements, 2,703 missed) |
+| Coverage | **73%** (10,326 statements, 2,782 missed) |
 | Ruff F/E9 | **All checks passed** |
 
-Phase 6A and the streaming follow-up add 27 tests: provider request/response/retry/redaction, SSE streaming, full endpoint
-URLs, content-part responses, structured repair success/exhaustion, plain-text
+Phase 6A and the streaming/compact follow-ups add 37 tests: provider
+request/response/retry/redaction, SSE streaming, full endpoint URLs,
+content-part responses, structured repair success/exhaustion, plain-text
 rejection, token/workflow limits, live request/token budgets, staged-live no-key
-safety, live memory harness and benchmark correctness.
+safety, live memory harness, benchmark correctness, and the compact planner
+protocol (prompt size, single-task validation, dynamic DAG, capability matching,
+invalid dependencies/cycles, repair, auto-selection).
 
 The two skips remain the Windows symlink-privilege test and the Docker-missing
 failure-path test (Docker was available for the final run).

@@ -355,6 +355,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     benchmark_experiments.add_argument("--timeout", type=float, default=120.0)
 
+    benchmark_compact = benchmark_sub.add_parser(
+        "hkgai-compact-planner",
+        help="single-request Compact Planner probe (max 768 tokens)",
+    )
+    _add_common_options(benchmark_compact, suppress_defaults=True)
+    benchmark_compact.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_compact.add_argument("--allow-live-api", action="store_true")
+    benchmark_compact.add_argument("--timeout", type=float, default=120.0)
+
     return parser
 
 

@@ -1,0 +1,32 @@
+{
+  "configured_model": "t2_hkgai-v3_fp8_1m_e7",
+  "response_model": "t2_hkgai-v3_fp8_1m_e10_meeting",
+  "status": "PASSED",
+  "http_status": 200,
+  "prompt_chars": 889,
+  "system_chars": 470,
+  "catalog_chars": 322,
+  "elapsed_seconds": 13.5,
+  "prompt_tokens": 300,
+  "completion_tokens": 344,
+  "total_tokens": 644,
+  "finish_reason": "stop",
+  "content_chars": 286,
+  "content_preview": "{\"goal_summary\":\"Create notes/simple.md containing the text \\\"hello\\\".\",\"subtasks\":[{\"key\":\"k1\",\"description\":\"Create the file notes/simple.md, creating the notes directory if needed, with exactly the content: hello\",\"required_capabilities\":[\"coding\"],\"depends_on\":[],\"kind\":\"coding\"}]}",
+  "valid_json": true,
+  "plan_valid": true,
+  "capability_valid": true,
+  "subtask_count": 1,
+  "error_type": null,
+  "error_detail": null,
+  "budget": {
+    "requests": 1,
+    "tokens": 644,
+    "max_requests": 1,
+    "max_tokens": 10000,
+    "request_budget_exceeded": false,
+    "token_budget_exceeded": false
+  },
+  "output_dir": "benchmarks\\runs\\hkgai_compact_planner_20261109_202704",
+  "checked_at": "2026-11-09T12:26:50.503303Z"
+}

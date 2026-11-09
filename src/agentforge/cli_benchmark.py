@@ -90,11 +90,13 @@ async def run_benchmark_command(
         return await _hkgai_probe(args, settings_factory, console)
     if command == "hkgai-experiments":
         return await _hkgai_experiments(args, settings_factory, console)
+    if command == "hkgai-compact-planner":
+        return await _hkgai_compact_planner(args, settings_factory, console)
     console.print(
         Text(
             "usage: agentforge benchmark "
             "<list|run|compare|report|failures|live|hkgai-probe|"
-            "hkgai-experiments>"
+            "hkgai-experiments|hkgai-compact-planner>"
         )
     )
     return 2
@@ -412,6 +414,46 @@ async def _hkgai_experiments(args: argparse.Namespace, settings_factory, console
             str(item.schema_valid),
             str(item.plan_valid),
         )
+    console.print(table)
+    console.print(Text(f"Output: {result.output_dir}"))
+    return 0 if result.status == "PASSED" else 1
+
+
+async def _hkgai_compact_planner(args: argparse.Namespace, settings_factory, console: Console) -> int:
+    from agentforge.benchmark.hkgai_compact_planner import run_hkgai_compact_planner
+
+    if not args.allow_live_api:
+        console.print(
+            Text(
+                "Refusing Compact Planner probe: pass --allow-live-api explicitly.",
+                style="bold yellow",
+            )
+        )
+        return 2
+    settings = settings_factory(args)
+    try:
+        result = await run_hkgai_compact_planner(
+            settings,
+            allow_live_api=True,
+            output_dir=args.output_dir,
+            timeout=args.timeout,
+        )
+    except PermissionError as exc:
+        console.print(Text(str(exc), style="red"))
+        return 2
+    table = Table(title=f"HKGAI Compact Planner: {result.status}")
+    table.add_column("Metric")
+    table.add_column("Value")
+    table.add_row("Configured model", result.configured_model)
+    table.add_row("Response model", result.response_model or "n/a")
+    table.add_row("HTTP status", str(result.http_status))
+    table.add_row("Prompt chars", str(result.prompt_chars))
+    table.add_row("Elapsed", f"{result.elapsed_seconds}s")
+    table.add_row("Tokens", f"{result.prompt_tokens}+{result.completion_tokens}={result.total_tokens}")
+    table.add_row("finish_reason", str(result.finish_reason))
+    table.add_row("JSON / plan / capability", f"{result.valid_json} / {result.plan_valid} / {result.capability_valid}")
+    table.add_row("Subtasks", str(result.subtask_count))
+    table.add_row("Error", result.error_type or "none")
     console.print(table)
     console.print(Text(f"Output: {result.output_dir}"))
     return 0 if result.status == "PASSED" else 1

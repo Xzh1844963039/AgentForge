@@ -13,10 +13,10 @@ AgentForge is the final project for the HKUST NLP/Agent course (current version 
 | Phase 3 — Evidence-first memory evolution, procedural promotion, feedback, ablation | ✅ complete (pipeline verified; real-LLM learning NOT VERIFIED) |
 | Phase 4 — Human-in-the-loop, approvals, clarification, pause/resume/cancel, reassignment | ✅ complete (runtime verified; real-LLM HITL NOT VERIFIED) |
 | Phase 5 — Benchmark harness, 34-task dev set, ablation, reliability, performance | ✅ complete (fixture benchmark verified; live LLM NOT VERIFIED) |
-| Phase 6A — Provider/structured-output hardening, staged live acceptance, final readiness | ✅ engineering complete; HKGAI Stage 1 passed, Stage 2 blocked by gateway disconnect |
+| Phase 6A — Provider/structured-output hardening, staged live acceptance, final readiness | ✅ engineering complete; HKGAI Stage 1 passed, one-request compact Stage 2 probe passed, full Stage 2 still blocked by gateway disconnect |
 | Phase 6 — Final submission and authorized live execution | ⏳ awaiting credentials and official test set |
 
-**Verified on 2026-11-09:** `274 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed** (4 Phase 2 + 1 Phase 5 container-death test); Ruff F/E9 clean; coverage **73%**; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM Stage 1 connectivity passed with HKGAI; Stage 2 structured planning, the streaming probe and control experiment B are blocked by a server-side pre-response disconnect; minimal JSON control A passed. Stages 3–6, real-LLM HITL and memory reuse remain **NOT VERIFIED**. No key was logged or committed.
+**Verified on 2026-11-09:** `284 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed** (4 Phase 2 + 1 Phase 5 container-death test); Ruff F/E9 clean; coverage **73%**; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM Stage 1 connectivity passed with HKGAI. A single authorized Compact Planner request passed (HTTP 200, 13.5s, 644 tokens, valid one-subtask plan), but **full Stage 2 is not marked passed**: the original full-protocol prompts, the streaming probe and control experiment B still ended in a server-side pre-response disconnect, while minimal JSON control A passed. Stages 3–6, real-LLM HITL and memory reuse remain **NOT VERIFIED**. No key was logged or committed. See `docs/HKGAI_COMPACT_PLANNER.md`.
 
 Phase 6A highlights:
 
@@ -230,6 +230,19 @@ It sends the exact failed Coordinator planning prompt with `stream=true`, no
 retries, no tools, max 1 request and a 10,000-token probe budget. It is not run
 automatically.
 
+A one-request Compact Planner probe is also available:
+
+```powershell
+python -m agentforge benchmark hkgai-compact-planner --provider hkgai `
+  --allow-live-api --timeout 120 --output-dir benchmarks/runs
+```
+
+It uses the 889-character compact prompt (versus 2,290 for the full planner),
+`stream=false`, `max_tokens=768`, no retries, no tools and a 1-request budget.
+The authorized run on 2026-11-09 passed in 13.5s with a valid one-subtask plan;
+see `docs/HKGAI_COMPACT_PLANNER.md`. Passing this probe does **not** mark full
+Stage 2 complete.
+
 ### 10. Run the tests
 
 ```powershell
@@ -240,10 +253,11 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-274 passed, 2 skipped
+284 passed, 2 skipped
 ```
 
-The Phase 6A tests add provider request/response/retry/redaction tests, optional SSE streaming parsing, bounded
+The Phase 6A tests add provider request/response/retry/redaction tests, optional
+SSE streaming parsing, compact/full planner protocol selection, bounded
 structured-output repair, token/LLM/repeated-action limits, live stage no-key
 safety, live-budget enforcement, the live memory harness and benchmark
 correctness checks. Phase 4/5 tests remain active.
@@ -283,7 +297,7 @@ AGENTFORGE_DEEPSEEK_MODEL=deepseek-chat
 
 `DEEPSEEK_API_KEY` is accepted as an alias. Selecting a real provider without credentials fails explicitly; it never silently falls back to mock.
 
-HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the course. `AGENTFORGE_HKGAI_STREAM=false` is the default; set it to `true` to use SSE streaming.
+HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the course. `AGENTFORGE_HKGAI_STREAM=false` is the default; set it to `true` to use SSE streaming. `AGENTFORGE_PLANNER_PROTOCOL=auto` (the default) selects the 889-character compact planner for HKGAI and the full planner for DeepSeek/mock; use `full` or `compact` to override explicitly. Compact is recommended for HKGAI after the authorized one-request probe passed, but it does not by itself mark full Stage 2 complete.
 
 ### Robustness limits
 
@@ -291,6 +305,7 @@ HKGAI requires `AGENTFORGE_HKGAI_BASE_URL` and `AGENTFORGE_HKGAI_MODEL` from the
 |---|---|---|
 | `AGENTFORGE_STRUCTURED_OUTPUT_REPAIRS` | `1` | Bounded JSON action/plan repair attempts |
 | `AGENTFORGE_REQUIRE_STRUCTURED_ACTIONS` | `true` | Reject plain text in task mode |
+| `AGENTFORGE_PLANNER_PROTOCOL` | `auto` | Planner prompt: auto (compact for HKGAI), full, or compact |
 | `AGENTFORGE_MAX_TASK_TOKENS` | `120000` | Per-task token guard |
 | `AGENTFORGE_MAX_LLM_CALLS_PER_WORKFLOW` | `200` | Workflow-wide LLM-call guard |
 | `AGENTFORGE_MAX_REPEATED_TOOL_ACTIONS` | `3` | Stop repeated identical tool calls |
@@ -712,7 +727,7 @@ docker ps -a
 # no AgentForge containers left
 ```
 
-The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 6A suite is `274 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Benchmark Python tasks additionally execute their generated code and independent verifier tests in Docker.
+The Docker tests cover sandbox start/stop, non-root UID, blocked network, per-agent workspace isolation, configured CPU/memory/PID/read-only limits, and real prime-script execution. The full Phase 6A suite is `284 passed, 2 skipped`; the only skips are the Windows symlink-privilege test and the Docker-missing failure-path test (skipped because Docker was available). Benchmark Python tasks additionally execute their generated code and independent verifier tests in Docker.
 
 The final report is grounded in the persisted `tool_calls` audit: stdout, stderr, exit code, duration, script path and sandbox container are forwarded as `[TOOL_EVIDENCE]` to synthesis/review/finalize. Mock content is still labelled, but it now quotes recorded facts rather than fixed placeholders.
 

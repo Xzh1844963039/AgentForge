@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     max_repeated_tool_actions: int = Field(default=3, ge=1, le=20)
     structured_output_repairs: int = Field(default=1, ge=0, le=5)
     require_structured_actions: bool = True
+    planner_protocol: Literal["auto", "full", "compact"] = "auto"
     enable_final_review: bool = True
 
     # --- Tools -----------------------------------------------------------------

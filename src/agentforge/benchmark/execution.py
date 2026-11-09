@@ -6,7 +6,10 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentforge.agents.coordinator import CoordinatorAgent
+from agentforge.agents.coordinator import (
+    CoordinatorAgent,
+    resolve_planner_protocol,
+)
 from agentforge.agents.factory import DEFAULT_PROFILES
 from agentforge.agents.registry import AgentRegistry
 from agentforge.benchmark.models import (
@@ -116,6 +119,9 @@ def _single_agent_runtime(runtime: AgentForgeRuntime) -> None:
         require_structured_actions=runtime.settings.require_structured_actions,
         max_task_tokens=runtime.settings.max_task_tokens,
         max_repeated_tool_actions=runtime.settings.max_repeated_tool_actions,
+        planner_protocol=resolve_planner_protocol(
+            runtime.settings.planner_protocol, runtime.provider.name
+        ),
     )
     for permission in ToolPermission:
         runtime.tool_policy.grant(SOLO_AGENT_ID, permission)

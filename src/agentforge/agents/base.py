@@ -159,6 +159,7 @@ class BaseAgent:
         require_structured_actions: bool = True,
         max_task_tokens: int = 120_000,
         max_repeated_tool_actions: int = 3,
+        planner_protocol: str = "full",
     ) -> None:
         self.profile = profile
         self.provider = provider
@@ -171,6 +172,9 @@ class BaseAgent:
         self.require_structured_actions = require_structured_actions
         self.max_task_tokens = max(1000, max_task_tokens)
         self.max_repeated_tool_actions = max(1, max_repeated_tool_actions)
+        self.planner_protocol = (
+            planner_protocol if planner_protocol in {"full", "compact"} else "full"
+        )
         self._inbox: list[Message] = []
         self._task_states: dict[str, TaskStatus] = {}
         self._active_task_id: str | None = None

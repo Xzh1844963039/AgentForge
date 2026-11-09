@@ -99,6 +99,34 @@ Streaming 没有改善，因为服务端在返回任何响应头或字节之前�
 
 实验 B 的 Prompt 只比完整 Stage 2 少 8 个字符，因此它没有真正减少 Prompt 规模；结果与 3.1 一致。
 
+### 3.4 Compact Planner 单请求验证（新增，2026-11-09）
+
+在用户明确授权下，额外执行了**恰好 1 次** Compact Planner 请求：
+
+- System：Compact Planner Protocol，470 字符
+- Agent Catalog：紧凑能力目录，322 字符
+- 总 Prompt：**889 字符**（完整协议为 2,290 字符）
+- 用户任务：`Create notes/simple.md containing "hello".`
+- `MAX_SUBTASKS=3`
+- `stream=false`
+- `max_tokens=768`
+- timeout 120s，`max_retries=0`，无工具
+- 预算：1 次请求 / 10,000 tokens
+
+结果：
+
+- HTTP **200**，耗时 **13.5s**
+- 返回模型：`t2_hkgai-v3_fp8_1m_e10_meeting`
+- Usage：300 prompt + 344 completion = **644 tokens**
+- `finish_reason=stop`
+- 返回 1 个 `coding` 子任务，JSON 可解析，`ExecutionPlan`、`validate_plan`
+  和 `CapabilityAssigner` 均通过
+
+这说明当前 Endpoint/模型在 Prompt 缩至 889 字符时，可以完成一次合法的
+单任务规划请求。但它**不能**证明完整 Stage 2 已通过：完整 Prompt 的请求仍然
+全部在响应头之前断开，多任务/复杂目标、修复路径和后续 Stage 仍未真实验证。
+因此 Compact 仅作为 HKGAI 推荐的可配置模式，Stage 2 整体状态仍为 FAILED。
+
 ## 4. 对照结论
 
 | 请求 | Prompt 字符数 | HTTP | 耗时 | 结果 |
@@ -108,14 +136,17 @@ Streaming 没有改善，因为服务端在返回任何响应头或字节之前�
 | 完整 Planner（Stage 2） | 2,298 | 无 | 65–68s | 服务端无响应断开 |
 | Planner + stream | 2,298 | 无 | 67.437s | 服务端无响应断开 |
 | Planner + 简单任务（B） | 2,290 | 无 | 58.375s | 服务端无响应断开 |
+| Compact Planner | 889 | 200 | 13.5s | 成功，644 tokens，合法单任务计划 |
 
 因此：
 
 - 认证、Endpoint、Model 路由、Token Usage 和普通 JSON 解析均可工作。
-- 失败与 **完整 Planner System Prompt + Agent Catalog + 规划 JSON 任务** 的组合相关。
+- 失败与 **完整 Planner System Prompt + Agent Catalog + 规划 JSON 任务** 的组合相关；
+  将 Prompt 压缩到 889 字符后的一次请求成功，说明 Prompt 规模/reasoning 时间
+  很可能参与触发服务端约 60 秒的 pre-response 限制。
 - 由于 B 的 Prompt 长度几乎未减少，不能把 B 的失败单独归因于“用户任务太复杂”。
 - 失败发生在服务端返回任何响应之前，客户端构造和解析不是直接原因。
-- 当前证据最符合：**服务端/网关对较大规划请求存在约 60 秒的 pre-response 超时，或规划请求触发的模型 reasoning 时间超过该窗口。**
+- Compact 只有一次成功样本，不能据此断言根因或阈值；完整 Stage 2 仍为失败状态。
 
 ## 5. 请求样例
 
@@ -154,7 +185,8 @@ Streaming 没有改善，因为服务端在返回任何响应头或字节之前�
 6. 是否可以根据请求时间、Endpoint 或账号侧日志，确认这些请求在服务端是
    超时、被拒绝还是路由失败？
 7. 是否可以通过降低 Prompt 长度、关闭 reasoning 或使用专用 structured-output
-   endpoint 来避免该限制？
+   endpoint 来避免该限制？客户端侧的 Compact（889 字符）单次请求已成功，但仍需
+   确认多任务 Prompt 的可用长度阈值和服务端 reasoning 预算。
 
 ## 7. 请求预算与账户影响
 
@@ -165,7 +197,8 @@ Streaming 没有改善，因为服务端在返回任何响应头或字节之前�
 - Streaming probe：1 次请求，0 tokens
 - 实验 A：1 次请求，186 tokens
 - 实验 B：1 次请求，0 tokens
-- 合计：**12 次请求，562 tokens**
+- Compact Planner：1 次请求，644 tokens
+- 合计：**13 次请求，1,206 tokens**
 - 没有使用其他 Provider/模型；没有工具执行或副作用。
 
 失败请求均无 Usage 返回，无法从客户端确认服务端是否计费。

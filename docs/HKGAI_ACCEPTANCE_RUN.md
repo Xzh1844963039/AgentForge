@@ -85,9 +85,23 @@ a valid plan plus action cannot be completed with one request.
 
 Stage 2 status: **FAILED**.
 
-No plan or structured action was produced, so no schema validation or repair path
-was exercised against the real model. No claim is made that the model can or
-cannot produce a valid plan until the gateway issue is resolved.
+No plan or structured action was produced by these full-prompt attempts, so no
+schema validation or repair path was exercised against the real model in them.
+
+### 3.1 Compact Planner follow-up (2026-11-09)
+
+A later authorized **one-request** Compact Planner probe reduced the measured
+prompt from 2,290 to 889 characters and passed: HTTP 200, 13.5s, 300+344 = 644
+tokens, `finish_reason=stop`, and a valid one-subtask `ExecutionPlan` whose
+capability is covered by the catalog. The response model remained
+`t2_hkgai-v3_fp8_1m_e10_meeting`.
+
+This is a narrow Stage 2 datapoint, not a Stage 2 pass. The full-protocol
+requests above still failed before response headers; multi-task live planning,
+repair behavior, complex goals and Stages 3–6 remain unverified. The compact
+protocol is configurable (`AGENTFORGE_PLANNER_PROTOCOL=auto|full|compact`) and
+recommended for HKGAI; the full protocol remains available. Full evidence:
+`docs/HKGAI_COMPACT_PLANNER.md`.
 
 ## 4. Observed provider/model behavior
 

@@ -183,4 +183,14 @@ control (not authorized/run) would separate:
 2. real catalog + minimal system prompt;
 3. real system + catalog with plain-text response request.
 
+### Follow-up: Compact Planner (authorized 2026-11-09)
+
+A later one-request probe reduced the entire planning prompt to 889 chars
+(compact system 470 + compact catalog 322 + goal/controls) and **passed**:
+HTTP 200, 13.5s, 644 tokens, `finish_reason=stop`, and a valid one-subtask plan
+with valid capability coverage. The full-prompt requests still failed, so this
+narrows the failure toward prompt size / upstream reasoning time rather than an
+invalid request format, but a single sample does not prove causality. Full Stage
+2 remains failed. See `docs/HKGAI_COMPACT_PLANNER.md`.
+
 Stage 3–6 not started. No Push.

@@ -52,6 +52,58 @@ Rules:
 - Descriptions must be specific enough for an agent that cannot see this prompt.
 - Return exactly one JSON object. No Markdown fences, no commentary."""
 
+COMPACT_PLANNER_PROTOCOL = """Plan the goal as one JSON object only:
+{"goal_summary":"...","subtasks":[{"key":"k1","description":"...","required_capabilities":["capability"],"depends_on":[],"kind":"research|coding|analysis|writing|generic"}]}
+Rules: use only capability tokens from AGENTS; every task must be fully covered by one listed agent; depends_on references earlier keys and must be acyclic; at most MAX_SUBTASKS; do not add review/finalize tasks; return JSON only, no Markdown or commentary."""
+
+
+def resolve_planner_protocol(configured: str, provider_name: str) -> str:
+    if configured in {"full", "compact"}:
+        return configured
+    return "compact" if provider_name.lower() == "hkgai" else "full"
+
+
+def planner_catalog(
+    agent_cards: Sequence[AgentCard], *, compact: bool = False
+) -> str:
+    if compact:
+        return "\n".join(
+            f"- {card.agent_id}: {', '.join(card.capabilities)}"
+            for card in agent_cards
+        )
+    return "\n".join(
+        f"- {card.agent_id} ({card.name}, role={card.role.value}): "
+        f"capabilities={', '.join(card.capabilities)}. {card.description}"
+        for card in agent_cards
+    )
+
+
+def build_planner_messages(
+    goal: str,
+    agent_cards: Sequence[AgentCard],
+    max_subtasks: int,
+    *,
+    protocol: str = "full",
+) -> list[ChatMessage]:
+    compact = protocol == "compact"
+    catalog = planner_catalog(agent_cards, compact=compact)
+    if compact:
+        return [
+            ChatMessage.system(COMPACT_PLANNER_PROTOCOL),
+            ChatMessage.user(
+                f"[GOAL]\n{goal}\n\n[AGENTS]\n{catalog}\n\n"
+                f"[MAX_SUBTASKS]\n{max_subtasks}\n\nReturn JSON only."
+            ),
+        ]
+    return [
+        ChatMessage.system(PLANNER_PROTOCOL),
+        ChatMessage.user(
+            f"[GOAL]\n{goal}\n\n[AVAILABLE_AGENTS]\n{catalog}\n\n"
+            f"[MAX_SUBTASKS]\n{max_subtasks}\n\n"
+            "Return the JSON execution plan now."
+        ),
+    ]
+
 
 class PlanningAttempt(BaseModel):
     response: LLMResponse
@@ -85,23 +137,12 @@ class CoordinatorAgent(BaseAgent):
         if not agent_cards:
             raise PlanningError("no agents are registered; cannot plan")
 
-        catalog_lines = []
-        for card in agent_cards:
-            catalog_lines.append(
-                f"- {card.agent_id} ({card.name}, role={card.role.value}): "
-                f"capabilities={', '.join(card.capabilities)}. {card.description}"
-            )
-        catalog = "\n".join(catalog_lines)
-
-        base_messages = [
-            ChatMessage.system(PLANNER_PROTOCOL),
-            ChatMessage.user(
-                f"[GOAL]\n{goal}\n\n"
-                f"[AVAILABLE_AGENTS]\n{catalog}\n\n"
-                f"[MAX_SUBTASKS]\n{max_subtasks}\n\n"
-                "Return the JSON execution plan now."
-            ),
-        ]
+        base_messages = build_planner_messages(
+            goal,
+            agent_cards,
+            max_subtasks,
+            protocol=self.planner_protocol,
+        )
 
         attempts: list[PlanningAttempt] = []
         last_error: Exception | None = None
