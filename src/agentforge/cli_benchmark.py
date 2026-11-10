@@ -94,11 +94,14 @@ async def run_benchmark_command(
         return await _hkgai_compact_planner(args, settings_factory, console)
     if command == "hkgai-stage2":
         return await _hkgai_stage2(args, settings_factory, console)
+    if command == "hkgai-transport-probe":
+        return await _hkgai_transport_probe(args, settings_factory, console)
     console.print(
         Text(
             "usage: agentforge benchmark "
             "<list|run|compare|report|failures|live|hkgai-probe|"
-            "hkgai-experiments|hkgai-compact-planner|hkgai-stage2>"
+            "hkgai-experiments|hkgai-compact-planner|hkgai-stage2|"
+            "hkgai-transport-probe>"
         )
     )
     return 2
@@ -500,5 +503,56 @@ async def _hkgai_stage2(args: argparse.Namespace, settings_factory, console: Con
     table.add_row("Hard stopped", str(result.hard_stopped))
     table.add_row("Error", result.error_type or "none")
     console.print(table)
+    console.print(Text(f"Output: {result.output_dir}"))
+    return 0 if result.status == "PASSED" else 1
+
+
+async def _hkgai_transport_probe(
+    args: argparse.Namespace, settings_factory, console: Console
+) -> int:
+    from agentforge.benchmark.hkgai_transport_probe import (
+        run_hkgai_transport_probe,
+    )
+
+    if not args.allow_live_api:
+        console.print(
+            Text(
+                "Refusing transport probe: pass --allow-live-api explicitly "
+                "(max 2 requests).",
+                style="bold yellow",
+            )
+        )
+        return 2
+    settings = settings_factory(args)
+    try:
+        result = await run_hkgai_transport_probe(
+            settings,
+            allow_live_api=True,
+            output_dir=args.output_dir,
+            timeout=args.timeout,
+            max_tokens=args.max_tokens,
+        )
+    except PermissionError as exc:
+        console.print(Text(str(exc), style="red"))
+        return 2
+    table = Table(title=f"HKGAI Transport Probe: {result.outcome} [{result.status}]")
+    table.add_column("Metric")
+    table.add_column("Value")
+    table.add_row("Prompt chars", str(result.prompt_chars))
+    table.add_row("Prompt sha256[:16]", result.prompt_sha256)
+    table.add_row("Endpoint host", result.endpoint_host)
+    table.add_row("Proxy", f"{result.proxy_url or 'none'} ({result.proxy_transport or 'n/a'})")
+    table.add_row("Requests / tokens", f"{result.total_requests} / {result.total_tokens}")
+    table.add_row("Stopped after failure", str(result.stopped_after_first_failure))
+    for call in result.calls:
+        table.add_row(
+            f"Request {call.index}",
+            f"HTTP {call.http_status} in {call.elapsed_seconds}s, "
+            f"headers {call.headers_ms}ms, tokens {call.total_tokens}, "
+            f"client {call.client_instance}, closed={call.client_closed}, "
+            f"reused={call.connection_reused}, status={call.status}",
+        )
+    console.print(table)
+    console.print(Text(result.interpretation))
     console.print(Text(f"Output: {result.output_dir}"))
     return 0 if result.status == "PASSED" else 1

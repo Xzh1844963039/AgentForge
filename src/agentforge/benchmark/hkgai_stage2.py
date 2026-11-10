@@ -118,11 +118,16 @@ class Stage2Result(BaseModel):
 
 
 def _is_no_response_disconnect(exc: BaseException) -> bool:
-    if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
-        return True
-    if isinstance(exc, LLMProviderError) and exc.status_code is None:
-        return True
-    return False
+    if isinstance(exc, LLMProviderError):
+        if exc.status_code is not None:
+            return False
+        return exc.error_class in {
+            "no_response_disconnect",
+            "timeout",
+            "transport",
+            "provider_error",
+        }
+    return isinstance(exc, (httpx.TimeoutException, httpx.TransportError))
 
 
 class Stage2BudgetProvider(BaseLLMProvider):

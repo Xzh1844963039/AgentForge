@@ -376,6 +376,16 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark_stage2.add_argument("--max-tokens", type=int, default=20_000)
     benchmark_stage2.add_argument("--request-delay", type=float, default=60.0)
 
+    benchmark_transport = benchmark_sub.add_parser(
+        "hkgai-transport-probe",
+        help="two-request fresh-connection HTTP transport experiment",
+    )
+    _add_common_options(benchmark_transport, suppress_defaults=True)
+    benchmark_transport.add_argument("--output-dir", default="benchmarks/runs")
+    benchmark_transport.add_argument("--allow-live-api", action="store_true")
+    benchmark_transport.add_argument("--timeout", type=float, default=120.0)
+    benchmark_transport.add_argument("--max-tokens", type=int, default=1024)
+
     return parser
 
 

@@ -22,6 +22,7 @@ class DeepSeekProvider(OpenAICompatibleProvider):
         max_retries: int = 3,
         client: httpx.AsyncClient | None = None,
         stream: bool = False,
+        trust_env: bool = True,
     ) -> None:
         super().__init__(
             name="deepseek",
@@ -34,4 +35,5 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             max_retries=max_retries,
             client=client,
             stream=stream,
+            trust_env=trust_env,
         )

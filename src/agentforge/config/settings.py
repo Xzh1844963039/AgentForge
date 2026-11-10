@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     max_tokens: int = Field(default=2048, ge=64)
     request_timeout: float = Field(default=60.0, gt=0)
     max_retries: int = Field(default=3, ge=0, le=10)
+    # httpx trust_env=True also picks up the Windows registry proxy, not just
+    # HTTP_PROXY/HTTPS_PROXY. Set false to bypass any system proxy explicitly.
+    http_trust_env: bool = True
     mock_latency_ms: int = Field(default=0, ge=0, le=30_000)
 
     # --- Orchestration safety limits -------------------------------------------

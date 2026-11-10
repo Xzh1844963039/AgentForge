@@ -15,11 +15,15 @@ from typing import Sequence
 import httpx
 
 from agentforge.llm.base import (
+    ERROR_CLASS_HTTP_CLIENT,
+    ERROR_CLASS_HTTP_SERVER,
+    ERROR_CLASS_PARSE,
     BaseLLMProvider,
     ChatMessage,
     LLMProviderError,
     LLMResponse,
     TokenUsage,
+    classify_transport_error,
 )
 
 logger = logging.getLogger("agentforge.llm")
@@ -43,6 +47,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         max_retries: int = 3,
         client: httpx.AsyncClient | None = None,
         stream: bool = False,
+        trust_env: bool = True,
     ) -> None:
         if not api_key:
             raise ValueError("api_key must not be empty")
@@ -64,6 +69,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         self._client = client
         self._owns_client = client is None
         self.stream = stream
+        self.trust_env = trust_env
 
     @property
     def endpoint(self) -> str:
@@ -73,7 +79,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(self._timeout))
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self._timeout),
+                trust_env=self.trust_env,
+            )
             self._owns_client = True
         return self._client
 
@@ -139,6 +148,11 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                         f"{response.status_code}: {detail}",
                         provider=self.name,
                         status_code=response.status_code,
+                        error_class=(
+                            ERROR_CLASS_HTTP_CLIENT
+                            if response.status_code < 500
+                            else ERROR_CLASS_HTTP_SERVER
+                        ),
                     )
                     if (
                         response.status_code not in self.RETRYABLE_STATUS_CODES
@@ -157,6 +171,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                     f"{self.name} transport error after {latency_ms:.0f} ms: "
                     f"{type(exc).__name__}: {exc}",
                     provider=self.name,
+                    error_class=classify_transport_error(exc),
                 )
                 if attempt >= attempts - 1:
                     raise last_error from exc
@@ -241,6 +256,11 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                             provider=self.name,
                             status_code=response.status_code,
                             details={"stream_metrics": metrics},
+                            error_class=(
+                                ERROR_CLASS_HTTP_CLIENT
+                                if response.status_code < 500
+                                else ERROR_CLASS_HTTP_SERVER
+                            ),
                         )
                         if (
                             response.status_code not in self.RETRYABLE_STATUS_CODES
@@ -282,6 +302,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                                 provider=self.name,
                                 status_code=response.status_code,
                                 details={"stream_metrics": metrics},
+                                error_class=ERROR_CLASS_PARSE,
                             ) from exc
                         if not isinstance(chunk, dict):
                             raise LLMProviderError(
@@ -289,6 +310,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                                 provider=self.name,
                                 status_code=response.status_code,
                                 details={"stream_metrics": metrics},
+                                error_class=ERROR_CLASS_PARSE,
                             )
                         if isinstance(chunk.get("model"), str) and chunk["model"]:
                             response_model = chunk["model"]
@@ -329,12 +351,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                         f"(reasoning_chars={metrics['reasoning_chars']})",
                         provider=self.name,
                         details={"stream_metrics": metrics},
+                        error_class=ERROR_CLASS_PARSE,
                     )
                 if not done and finish_reason is None:
                     raise LLMProviderError(
                         f"{self.name} stream ended before a terminal event",
                         provider=self.name,
                         details={"stream_metrics": metrics},
+                        error_class=ERROR_CLASS_PARSE,
                     )
                 if not done and finish_reason is not None:
                     metrics["terminal_event_missing"] = True
@@ -380,6 +404,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                     f"{elapsed_ms:.0f} ms: {type(exc).__name__}: {exc}",
                     provider=self.name,
                     details={"stream_metrics": metrics},
+                    error_class=classify_transport_error(exc),
                 )
                 if content_parts:
                     raise error from exc
@@ -437,6 +462,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 f"{self.name} returned non-JSON content",
                 provider=self.name,
                 status_code=response.status_code,
+                error_class=ERROR_CLASS_PARSE,
             ) from exc
 
         try:
@@ -462,6 +488,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                 f"(purpose={purpose or 'unspecified'})",
                 provider=self.name,
                 status_code=response.status_code,
+                error_class=ERROR_CLASS_PARSE,
             ) from exc
 
         usage_data = data.get("usage") or {}

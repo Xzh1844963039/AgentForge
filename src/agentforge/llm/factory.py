@@ -27,6 +27,7 @@ def build_llm_provider(
         "default_max_tokens": settings.max_tokens,
         "timeout": settings.request_timeout,
         "max_retries": settings.max_retries,
+        "trust_env": settings.http_trust_env,
     }
 
     if selected == "mock":
