@@ -120,6 +120,15 @@ Continue the bounded runner with fresh authorization. The workflow is already
 wired and needs at most 5 requests (plan, tool_call action, completion action,
 synthesis, finalize) with the remaining A–G checks automatic.
 
+## 10. Transport follow-up (2026-11-10)
+
+A dedicated two-request fresh-connection experiment (new `httpx.AsyncClient` and
+`Connection: close` per request) failed on its **first** request with no response
+headers for ~120s. HTTP connection reuse is therefore ruled out as the root
+cause, and the audit found provider traffic silently routed through the Windows
+registry proxy `http://127.0.0.1:7897` (controllable via
+`AGENTFORGE_HTTP_TRUST_ENV`). See `docs/HKGAI_TRANSPORT_DIAGNOSIS.md`.
+
 ## 9. Stage 3–6 status after this run
 
 Stage 2 did not pass, so live Stages 3–6 were **not** run and no additional
@@ -139,5 +148,5 @@ online requests were made. Offline integration was re-verified:
 - **Live gating** — `benchmark live --provider hkgai --stage all` without
   `--allow-live-api` made 0 requests and marked every stage NOT_VERIFIED.
 
-Final offline regression for this change set: **300 passed, 2 skipped**,
-Docker **5/5**, Ruff F/E9 clean, coverage **73%**.
+Final offline regression for this change set: **314 passed, 2 skipped**,
+Docker **5/5**, Ruff F/E9 clean, coverage **74%**.

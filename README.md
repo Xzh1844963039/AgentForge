@@ -16,7 +16,7 @@ AgentForge is the final project for the HKUST NLP/Agent course (current version 
 | Phase 6A — Provider/structured-output hardening, staged live acceptance, final readiness | ✅ engineering complete; HKGAI Stage 1 passed; real-runtime Stage 2 **PARTIALLY_VERIFIED** (A/B/C live; D–G blocked by gateway follow-up disconnects) |
 | Phase 6 — Final submission and authorized live execution | ⏳ awaiting credentials and official test set |
 
-**Verified on 2026-11-10:** `300 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed**; Ruff F/E9 clean; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM Stage 1 connectivity passed with HKGAI. The compact planner is now wired into the real runtime (`auto` → compact for HKGAI; full retained for other providers), and the agent action prompt was reduced from ~9,640 to ~1,110 chars with a bounded tool ledger. A bounded real Stage 2 run (10/12 authorized requests, 4,057/20,000 tokens) verified live that the real runtime produces a valid plan and dispatches it by capability (A/B/C), but **D–G are still unverified**: every follow-up request in a session (repair or agent action, 1.3k–5.2k chars) was cut by the HKGAI gateway at ~56–64s with no response headers. Stages 3–6, real-LLM HITL and memory reuse remain **NOT VERIFIED**. No key was logged or committed. See `docs/HKGAI_STAGE2_REAL_RUN.md` and `docs/HKGAI_COMPACT_PLANNER.md`.
+**Verified on 2026-11-10:** `314 passed, 2 skipped` in the full pytest suite with Docker running; Docker integration **5/5 passed**; Ruff F/E9 clean; fixture benchmark **33/34 verified passes + 1 needs-review, 0 failures**. The 2 skips are the Windows symlink-privilege test and the Docker-missing failure-path test. Real-LLM Stage 1 connectivity passed with HKGAI. The compact planner is now wired into the real runtime (`auto` → compact for HKGAI; full retained for other providers), and the agent action prompt was reduced from ~9,640 to ~1,110 chars with a bounded tool ledger (tool-loop prompts stay ≤ ~1,375 chars across three tool turns). A bounded real Stage 2 run (10/12 authorized requests, 4,057/20,000 tokens) verified live that the real runtime produces a valid plan and dispatches it by capability (A/B/C), but **D–G are still unverified**: follow-up requests were cut by the HKGAI gateway at ~56–64s with no response headers. A dedicated two-request transport experiment then showed that a brand-new client with `Connection: close` still received **no response for ~120s**, so HTTP connection reuse is not the root cause. The audit also found that httpx was silently routing provider traffic through the Windows **registry proxy** `http://127.0.0.1:7897`; `AGENTFORGE_HTTP_TRUST_ENV=false` now allows bypassing it. Stages 3–6, real-LLM HITL and memory reuse remain **NOT VERIFIED**. No key was logged or committed. See `docs/HKGAI_TRANSPORT_DIAGNOSIS.md`, `docs/HKGAI_STAGE2_REAL_RUN.md` and `docs/HKGAI_COMPACT_PLANNER.md`.
 
 Phase 6A highlights:
 
@@ -260,6 +260,21 @@ runs; `PARTIALLY_VERIFIED` when only some checks are backed by live evidence.
 See `docs/HKGAI_STAGE2_REAL_RUN.md` for the 2026-11-10 run and the gateway
 finding.
 
+A two-request HTTP transport experiment (fresh client + `Connection: close` per
+request, real compact action prompt, `retries=0`, no tools) is also available:
+
+```powershell
+python -m agentforge benchmark hkgai-transport-probe --provider hkgai `
+  --allow-live-api --timeout 120 --max-tokens 1024 --output-dir benchmarks/runs
+```
+
+It stops immediately if a request returns no response and records per-request
+transport evidence (client instance, proxy, header latency, TCP address,
+connection reuse, pool state, tokens) without ever logging the Authorization
+header. The 2026-11-10 run hit its first-request timeout with no headers, so
+HTTP connection reuse was ruled out as the root cause; see
+`docs/HKGAI_TRANSPORT_DIAGNOSIS.md`.
+
 ### 10. Run the tests
 
 ```powershell
@@ -270,7 +285,7 @@ pytest -m docker -q        # only with Docker running
 Expected on the current machine (Docker running):
 
 ```text
-300 passed, 2 skipped
+314 passed, 2 skipped
 ```
 
 The Phase 6A/6B tests add provider request/response/retry/redaction tests,

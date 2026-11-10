@@ -328,3 +328,71 @@ def test_action_retry_does_not_echo_truncated_content():
     second = provider.calls[1]["messages"]
     assert not any(message["role"] == "assistant" for message in second)
     assert "[RETRY]" in second[-1]["content"]
+
+
+def test_compact_tool_turns_keep_prompts_bounded(tmp_path):
+    """Compact tool loops must not grow the prompt with raw tool history."""
+    import asyncio
+
+    plan = json.dumps(
+        {
+            "goal_summary": "Write and verify a note.",
+            "subtasks": [
+                {
+                    "key": "write",
+                    "description": "Write notes/ctx.txt and read it back.",
+                    "required_capabilities": ["coding"],
+                    "depends_on": [],
+                    "kind": "coding",
+                }
+            ],
+        }
+    )
+    script = [
+        plan,
+        json.dumps(
+            {
+                "action": "tool_call",
+                "tool_calls": [
+                    {
+                        "name": "write_file",
+                        "arguments": {"path": "notes/ctx.txt", "content": "bounded\n"},
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "action": "tool_call",
+                "tool_calls": [
+                    {"name": "read_file", "arguments": {"path": "notes/ctx.txt"}}
+                ],
+            }
+        ),
+        json.dumps({"action": "complete", "content": "done"}),
+        json.dumps({"action": "complete", "content": "draft"}),
+        json.dumps({"action": "complete", "content": "final"}),
+    ]
+    provider = _NamedMockProvider("hkgai", scripted_responses=script)
+
+    async def run():
+        settings = Settings(
+            data_dir=tmp_path,
+            llm_provider="hkgai",
+            memory_evolution_enabled=False,
+            enable_final_review=False,
+        )
+        async with AgentForgeRuntime(settings, provider=provider) as runtime:
+            workflow = await runtime.submit_goal("Write and verify a note.")
+            return workflow.status.value
+
+    status = asyncio.run(run())
+    assert status == "completed"
+    worker_prompts = [
+        len("\n\n".join(message["content"] for message in call["messages"]))
+        for call in provider.calls
+        if call["purpose"].startswith("execute:coding")
+    ]
+    assert len(worker_prompts) == 3
+    assert max(worker_prompts) < 2000, worker_prompts
+    assert worker_prompts[2] - worker_prompts[1] < 400, worker_prompts

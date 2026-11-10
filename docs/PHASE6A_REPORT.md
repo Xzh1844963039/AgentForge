@@ -227,12 +227,12 @@ Final code state:
 
 | Check | Result |
 |---|---|
-| `pytest -q` | **300 passed, 2 skipped** |
+| `pytest -q` | **314 passed, 2 skipped** |
 | Docker tests | **5 passed** (including container-death recovery) |
-| Coverage | **73%** (10,768 statements, 2,866 missed) |
+| Coverage | **74%** (11,110 statements, 2,934 missed) |
 | Ruff F/E9 | **All checks passed** |
 
-Phase 6A and the streaming/compact follow-ups add 53 tests: provider
+Phase 6A and the streaming/compact follow-ups add 67 tests: provider
 request/response/retry/redaction, SSE streaming, full endpoint URLs,
 content-part responses, structured repair success/exhaustion, plain-text
 rejection, token/workflow limits, live request/token budgets, staged-live no-key
