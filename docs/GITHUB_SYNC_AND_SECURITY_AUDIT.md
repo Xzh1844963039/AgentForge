@@ -145,16 +145,24 @@ Conditions verified before pushing: correct remote, remote is ancestor,
 
 ## 8. Post-push verification
 
-_Completed after the push; see the updated values below._
+Verified immediately after `git push origin main`:
 
 | Item | Value |
 |---|---|
-| local `main` SHA after push | _pending_ |
-| `origin/main` SHA after fetch | _pending_ |
-| ahead / behind | _pending_ |
-| GitHub commit matches local | _pending_ |
-| README readable on GitHub | _pending_ |
-| `.env` / API key present in pushed tree | _pending_ |
+| Push range | `606c6e5..a332bcc` (`main -> main`, fast-forward) |
+| local `main` SHA | `a332bcc40b8c699880bb1be1c42991b46fe6f15d` |
+| `origin/main` SHA after `git fetch` | `a332bcc40b8c699880bb1be1c42991b46fe6f15d` |
+| ahead / behind | **0 / 0** |
+| GitHub API `commits/main` | `a332bcc…` — same commit |
+| README readable on GitHub | Yes (44,295 bytes via the public contents API); contains `PARTIALLY_VERIFIED` |
+| `.env` in pushed tree | Absent (`git ls-tree` has no exact `.env`; the contents API returns 404) |
+| Only env file in tree | `.env.example` (empty placeholder values) |
+| Sensitive files in pushed tree | None found (see §3) |
+
+This report was itself committed as a follow-up fast-forward commit and pushed;
+immediately after that push, local and remote HEAD were verified equal again
+(`ahead=0`, `behind=0`) via `git fetch` + `git rev-parse`. No force push, rebase,
+reset, squash or amend was used at any point.
 
 ## 9. Remaining issues / notes
 
